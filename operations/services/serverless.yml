@@ -1,0 +1,288 @@
+# Welcome to Serverless!
+#
+# This file is the main config file for your service.
+# It's very minimal at this point and uses default values.
+# You can always add more config options for more control.
+# We've included some commented out config examples here.
+# Just uncomment any of them to get that config option.
+#
+# For full config options, check the docs:
+#    docs.serverless.com
+#
+# Happy Coding!
+
+service: jsonrpc-proxy
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+# frameworkVersion: "=X.X.X"
+
+provider:
+  name: aws
+  runtime: python3.6
+  environment:
+    DYNAMODB_TABLE: ${self:custom.stackName}
+    STACK_NAME: ${self:custom.stackName}
+    DIFF_TOLERANCE: "10"
+    NGINX_CONFIG_BUCKET_NAME: ${self:custom.stackName}
+    TASK_DEFINITION_FAMILY: ${self:custom.stackName}-rpc-proxy
+    CLUSTER_ARN: ${self:custom.config.ECSCluster}
+    CLOUDWATCH_NAMESPACE: "OceanX"
+
+  stages: dev
+  profile: the0cean
+  region: us-east-1
+  logRetentionInDays: 7
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+      Resource: "arn:aws:dynamodb:${self:provider.region}:*:table/${self:provider.environment.DYNAMODB_TABLE}"
+
+    - Effect: Allow
+      Action:
+        - cloudwatch:PutMetricData
+      Resource: "*"
+    - Effect: Allow
+      Action:
+        - s3:PutObject
+      Resource: "arn:aws:s3:::${self:provider.environment.NGINX_CONFIG_BUCKET_NAME}/*"
+    - Effect: "Allow"
+      Action:
+        - "lambda:InvokeFunction"
+      Resource: "arn:aws:lambda:${self:provider.region}:#{AWS::AccountId}:function:${self:service}-${self:custom.stage}-*"
+    - Effect: "Allow"
+      Action:
+        - ecs:*
+      Resource: "*"
+    - Effect: "Allow"
+      Action:
+        - iam:PassRole
+      Resource:
+        Fn::GetAtt:
+          - TaskRole
+          - Arn
+
+
+plugins:
+  - serverless-python-requirements
+  - serverless-dynamodb-local
+  - serverless-resources-env
+  - serverless-pseudo-parameters
+
+custom:
+  stage: ${opt:stage, self:provider.stage}
+  stackName: ${self:service}-${self:custom.stage}
+  config: ${file(./config.${self:custom.stage}.yml)}
+  pythonRequirements:
+    dockerizePip: non-linux
+  dynamodb:
+    start:
+      port: 8000
+      inMemory: true
+      migrate: true
+      seed: false
+
+# you can add packaging information here
+package:
+  include:
+    - handlers/**
+  exclude:
+    - node_modules/**
+    - package.json
+    - package-lock.json
+    - test/**
+
+functions:
+  add_backend:
+    handler: handlers.backends.add_backend
+
+  list_backends:
+    handler: handlers.backends.list_backends
+
+  get_block_numbers:
+    handler: handlers.eth_nodes.get_block_numbers
+    events:
+      - schedule: rate(1 minute)
+    vpc:
+      securityGroupIds: ${self:custom.config.RpcSecurityGroupIds}
+      subnetIds: ${self:custom.config.RpcSubnetIds}
+    custom:
+      env-resources:
+        - UploadUnderscoreserviceUnderscoreconfigLambdaFunction
+
+  upload_service_config:
+    handler: handlers.service.upload_service_config
+
+  update_service:
+    handler: handlers.service.update_service
+    events:
+      - s3:
+          bucket: ${self:provider.environment.NGINX_CONFIG_BUCKET_NAME}
+          event: s3:ObjectCreated:*
+          rules:
+            - suffix: .conf
+    custom:
+      env-resources:
+        - Service
+
+
+resources:
+  Resources:
+    DynamoDbTable:
+      Type: 'AWS::DynamoDB::Table'
+      Properties:
+        AttributeDefinitions:
+          -
+            AttributeName: url
+            AttributeType: S
+        KeySchema:
+          -
+            AttributeName: url
+            KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 1
+          WriteCapacityUnits: 1
+        TableName: ${self:provider.environment.DYNAMODB_TABLE}
+
+    LogGroup:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: ${self:custom.stackName}-logs
+
+    TaskRole:
+      Type: AWS::IAM::Role
+      Properties:
+        Path: /
+        RoleName: ${self:custom.stackName}-task-role
+        AssumeRolePolicyDocument: |
+          {
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }]
+          }
+        Policies:
+        - PolicyName: fetch-config
+          PolicyDocument: |
+            {
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": "s3:getObject",
+                "Resource": "arn:aws:s3:::${self:provider.environment.NGINX_CONFIG_BUCKET_NAME}/*"
+              }]
+            }
+
+    TaskDefinition:
+      Type: AWS::ECS::TaskDefinition
+      Properties:
+        Family: ${self:provider.environment.TASK_DEFINITION_FAMILY}
+        TaskRoleArn:
+          "Ref": TaskRole
+        NetworkMode: bridge
+        ContainerDefinitions:
+          - Image: ${self:custom.config.ProxyContainerArn}
+            Essential: true
+            Memory: 64
+            MemoryReservation: 32
+            Name: nginx-proxy
+            PortMappings:
+              - ContainerPort: 80
+                HostPort: 0
+                Protocol: tcp
+            LogConfiguration:
+              LogDriver: awslogs
+              Options:
+                awslogs-group:
+                  "Ref": LogGroup
+                awslogs-region: ${self:provider.region}
+                awslogs-stream-prefix: nginx-proxy
+
+    ListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        ListenerArn: ${self:custom.config.LoadBalancerListener}
+        Priority: ${self:custom.config.ProxyContrainerPriority}
+        Conditions:
+          - Field: host-header
+            Values:
+              - ${self:custom.config.Host}
+        Actions:
+          - TargetGroupArn:
+              "Ref": TargetGroup
+            Type: forward
+
+    TargetGroup:
+      Type: AWS::ElasticLoadBalancingV2::TargetGroup
+      Properties:
+        Name: ${self:custom.stackName}
+        HealthCheckPath: "/"
+        HealthCheckProtocol: HTTP
+        HealthyThresholdCount: 2
+        Matcher:
+          HttpCode: 404
+        Port: 80
+        Protocol: HTTP
+        TargetType: instance
+        VpcId: ${self:custom.config.VpcId}
+        TargetGroupAttributes:
+          - Key: "deregistration_delay.timeout_seconds"
+            Value: "10"
+
+    ServiceRole:
+      Type: AWS::IAM::Role
+      Properties:
+        Path: /
+        RoleName: ${self:custom.stackName}-service-role
+        AssumeRolePolicyDocument: |
+          {
+            "Statement": [{
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }]
+          }
+        Policies:
+        - PolicyName: ecs-service
+          PolicyDocument: |
+            {
+              "Statement": [{
+                "Effect": "Allow",
+                "Action": [
+                  "elasticloadbalancing:Describe*",
+                  "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
+                  "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+                  "ec2:Describe*",
+                  "ec2:AuthorizeSecurityGroupIngress",
+                  "elasticloadbalancing:RegisterTargets",
+                  "elasticloadbalancing:DeregisterTargets"
+                ],
+                "Resource": "*"
+              }]
+            }
+
+    Service:
+      Type: AWS::ECS::Service
+      Properties:
+        ServiceName: ${self:custom.stackName}
+        Cluster: ${self:custom.config.ECSCluster}
+        DesiredCount: 1
+        TaskDefinition:
+          "Ref": TaskDefinition
+        Role:
+          "Ref": ServiceRole
+        LoadBalancers:
+          - TargetGroupArn:
+              "Ref": TargetGroup
+            ContainerName: nginx-proxy
+            ContainerPort: 80

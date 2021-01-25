@@ -1,0 +1,19 @@
+{
+  "name": "evm-jsonrpc-proxy",
+  "version": "0.1.0",
+  "description": "JSON RPC Proxy for EVM-based blocckhains",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "SEE CONTRIBUTORS",
+  "license": "SEE LICENSE IN LICENSE",
+  "dependencies": {
+    "install": "^0.13.0",
+    "serverless": "^2.1.1",
+    "serverless-dynamodb-local": "^0.2.39",
+    "serverless-pseudo-parameters": "^2.5.0",
+    "serverless-python-requirements": "^5.1.0",
+    "serverless-resources-env": "^0.3.1"
+  }
+}

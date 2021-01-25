@@ -1,0 +1,24 @@
+#!/bin/bash
+set -eu -o pipefail
+
+VAULT_URL=$1
+
+SUPERVISOR_CONFIG="/etc/supervisor/conf.d/init-backbone-node-supervisor.conf"
+
+# Write the init-besu supervisor config
+cat << EOF > $SUPERVISOR_CONFIG
+[program:init-backbone-node]
+command=/opt/besu/bin/init-backbone-node.sh
+stdout_logfile=/opt/besu/log/init-backbone-stdout.log
+stderr_logfile=/opt/besu/log/init-backbone-error.log
+numprocs=1
+autostart=true
+autorestart=unexpected
+stopsignal=INT
+user=ubuntu
+environment=VAULT_ADDR=$VAULT_URL
+EOF
+
+# Read and run the supervisor config
+sudo supervisorctl reread
+sudo supervisorctl update

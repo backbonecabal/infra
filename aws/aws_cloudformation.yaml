@@ -1,0 +1,158 @@
+Description: >
+ Cloud Formation
+
+Parameters:
+  NestedTemplateURL:
+    Type: String
+    Default: https://s3.amazonaws.com/aws-database-blog/artifacts/ethereum_smart_contracts/templates/
+    Description: The key prefix for the Amazon S3 bucket where the nested CloudFormation templates are stored. This is available for versioning.
+
+  EC2KeyPairName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of an existing EC2 key pair to enable access to EC2 instances in the stack.
+    ConstraintDescription: Use only a keypair you own in the region
+
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+    Default: EthereumStack
+
+  EthereumVpcCIDR:
+    Description: Please enter the IP range (CIDR notation) for this VPC
+    Type: String
+    Default: 10.0.0.0/16
+
+  EthereumPublicSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.10.0/24
+
+  EthereumPublicSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.20.0/24
+
+  EthereumPrivateSubnet1CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Type: String
+    Default: 10.0.30.0/24
+
+  EthereumPrivateSubnet2CIDR:
+    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Type: String
+    Default: 10.0.40.0/24
+
+  BastionCIDRforRDP:
+    Description: >-
+      IP Cidr from which you are likely to RDP into the instances. You can add
+      rules later by modifying the created security groups. To find your current ip go to http://www.whatismyip.com
+    Type: String
+    MinLength: "9"
+    MaxLength: "18"
+    AllowedPattern: '^([0-9]+\.){3}[0-9]+\/[0-9]+$'
+    Default: 1.2.2.1/32
+
+  LatestAmiId:
+    Description: Latest Windows AMI for Bastion host
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-windows-latest/Windows_Server-2016-English-Full-Base
+
+Resources:
+  Permissions:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}ethereum-2Perm.template.yaml"
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+
+  VPC:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}ethereum-3VPC.template.yaml"
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        EthereumVpcCIDR: !Ref EthereumVpcCIDR
+        EthereumPublicSubnet1CIDR: !Ref EthereumPublicSubnet1CIDR
+        EthereumPublicSubnet2CIDR: !Ref EthereumPublicSubnet2CIDR
+        EthereumPrivateSubnet1CIDR: !Ref EthereumPrivateSubnet1CIDR
+        EthereumPrivateSubnet2CIDR: !Ref EthereumPrivateSubnet2CIDR
+
+  SecurityGroups:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}ethereum-4SG.template.yaml"
+      Parameters:
+        EnvironmentName: !Ref AWS::StackName
+        EthereumVPC: !GetAtt VPC.Outputs.EthereumVPC
+        SourceCidrForWinRDP: !Ref BastionCIDRforRDP
+
+  Bastion:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}ethereum-5Bastion.template.yaml"
+      Parameters:
+        EC2KeyPairName: !Ref EC2KeyPairName
+        ETHBastionSecurityGroup: !GetAtt SecurityGroups.Outputs.ETHBastionSecurityGroup
+        EthereumPublicSubnet1: !GetAtt VPC.Outputs.EthereumPublicSubnet1
+        EthereumPublicSubnet2: !GetAtt VPC.Outputs.EthereumPublicSubnet2
+        EnvironmentName: !Ref AWS::StackName
+        LatestAmiId: !Ref LatestAmiId
+
+  KickStart:
+    Type: AWS::CloudFormation::Stack
+    Properties:
+      TemplateURL: !Sub "${NestedTemplateURL}ethereum-6network.template.yaml"
+      Parameters:
+        EC2KeyPairName:
+          Ref: EC2KeyPairName
+        EC2InstanceProfileArn: !GetAtt Permissions.Outputs.EthereumEC2InstanceProfile
+        EC2SecurityGroup: !GetAtt SecurityGroups.Outputs.EC2SecurityGroup
+        ECSRoleForALB: !GetAtt Permissions.Outputs.ECSRoleForALB
+        RootStackName:
+          Ref: AWS::StackName
+        LoadBalancerSecurityGroup: !GetAtt SecurityGroups.Outputs.LoadBalancerSecurityGroup
+        NetworkSubnetIDs: !GetAtt VPC.Outputs.EthereumPrivateSubnets
+        ALBSubnetIDs: !GetAtt VPC.Outputs.EthereumPrivateSubnets
+        NestedTemplateOrigin: !Ref NestedTemplateURL
+        VPCID: !GetAtt VPC.Outputs.EthereumVPC
+
+Outputs:
+  EthereumVPC:
+    Description: A reference to the created EthereumVPC
+    Value: !GetAtt VPC.Outputs.EthereumVPC
+
+  EthereumPublicSubnets:
+    Description: A list of the public subnets
+    Value: !GetAtt VPC.Outputs.EthereumPublicSubnets
+
+  EthereumPrivateSubnets:
+    Description: A list of the private subnets
+    Value: !GetAtt VPC.Outputs.EthereumPrivateSubnets
+
+  EthereumSecurityGroup:
+    Description: Security Group applied to the Application Load Balancer
+    Value: !GetAtt SecurityGroups.Outputs.LoadBalancerSecurityGroup
+
+  WindowsBastionHost:
+    Description: Windows bastion host used for remote access
+    Value: !GetAtt Bastion.Outputs.WindowsBastion
+
+  WindowsBastionSG:
+    Description: SG used to control access to Windows bastion host
+    Value: !GetAtt SecurityGroups.Outputs.ETHBastionSecurityGroup
+
+  WindowsBastionEIP:
+    Description: Windows bastion EIP to connect to
+    Value: !GetAtt Bastion.Outputs.WindowsBastionEIP
+
+  EthStatsURL:
+    Description: "Visit this URL to see the status of your Ethereum nodes"
+    Value: !GetAtt KickStart.Outputs.EthStatsURL
+
+  EthExplorerURL:
+    Description: "Visit this URL to view transactions on your Ethereum network"
+    Value: !GetAtt KickStart.Outputs.EthExplorerURL
+
+  EthJsonRPCURL:
+    Description: "Use this URL to access the Geth JSON RPC of your Ethereum Clients, or input it into Metamask"
+    Value: !GetAtt KickStart.Outputs.EthJsonRPCURL
