@@ -68,7 +68,6 @@ provider:
           - TaskRole
           - Arn
 
-
 plugins:
   - serverless-python-requirements
   - serverless-dynamodb-local
@@ -131,19 +130,16 @@ functions:
       env-resources:
         - Service
 
-
 resources:
   Resources:
     DynamoDbTable:
-      Type: 'AWS::DynamoDB::Table'
+      Type: "AWS::DynamoDB::Table"
       Properties:
         AttributeDefinitions:
-          -
-            AttributeName: url
+          - AttributeName: url
             AttributeType: S
         KeySchema:
-          -
-            AttributeName: url
+          - AttributeName: url
             KeyType: HASH
         ProvisionedThroughput:
           ReadCapacityUnits: 1
@@ -171,15 +167,15 @@ resources:
             }]
           }
         Policies:
-        - PolicyName: fetch-config
-          PolicyDocument: |
-            {
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": "s3:getObject",
-                "Resource": "arn:aws:s3:::${self:provider.environment.NGINX_CONFIG_BUCKET_NAME}/*"
-              }]
-            }
+          - PolicyName: fetch-config
+            PolicyDocument: |
+              {
+                "Statement": [{
+                  "Effect": "Allow",
+                  "Action": "s3:getObject",
+                  "Resource": "arn:aws:s3:::${self:provider.environment.NGINX_CONFIG_BUCKET_NAME}/*"
+                }]
+              }
 
     TaskDefinition:
       Type: AWS::ECS::TaskDefinition
@@ -253,23 +249,23 @@ resources:
             }]
           }
         Policies:
-        - PolicyName: ecs-service
-          PolicyDocument: |
-            {
-              "Statement": [{
-                "Effect": "Allow",
-                "Action": [
-                  "elasticloadbalancing:Describe*",
-                  "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
-                  "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
-                  "ec2:Describe*",
-                  "ec2:AuthorizeSecurityGroupIngress",
-                  "elasticloadbalancing:RegisterTargets",
-                  "elasticloadbalancing:DeregisterTargets"
-                ],
-                "Resource": "*"
-              }]
-            }
+          - PolicyName: ecs-service
+            PolicyDocument: |
+              {
+                "Statement": [{
+                  "Effect": "Allow",
+                  "Action": [
+                    "elasticloadbalancing:Describe*",
+                    "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
+                    "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
+                    "ec2:Describe*",
+                    "ec2:AuthorizeSecurityGroupIngress",
+                    "elasticloadbalancing:RegisterTargets",
+                    "elasticloadbalancing:DeregisterTargets"
+                  ],
+                  "Resource": "*"
+                }]
+              }
 
     Service:
       Type: AWS::ECS::Service

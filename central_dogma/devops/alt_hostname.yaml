@@ -1,0 +1,501 @@
+Description:
+  A middleware stack that adds a new hostname with its own target group to an Ether Cattle Load
+  Balancer.
+
+Parameters:
+  InfrastructureStack:
+    Type: String
+    Description: The infrastructure stack this target group extends
+  HostedZone:
+    Type: String
+    Description: Route53 hosted zone for DNS
+  ServiceName:
+    Type: String
+    Description: The name for this service (DNS will be ServiceName.HostedZone)
+  Priority:
+    Type: Number
+    Default: 1
+    Description:
+      The listener rule priority for this stack. Must be a unique number for children of the parent.
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+  GraphQLPort:
+    Type: Number
+    Default: 8547
+    Description: The port to connect to GraphQL on Replicas
+  WSHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8545
+    Description:
+      Port to use for websocket health checks. AWS load balancers don't handle health checks on
+      websockets, so we need to tie this to a different port.
+  GraphqlHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8547
+    Description: Port to use for graphql health checks.
+  ReplicaHealthCheckPort:
+    Type: Number
+    MaxValue: 65535
+    MinValue: 1
+    Default: 8545
+    Description:
+      Port to use for replica health checks. Enables you to use more advanced healtchecks if needed
+      for RPC.
+  RegionAgnosticDNS:
+    Description: Enable region agnostic DNS
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+
+Conditions:
+  HasSNSTopic: !Not [!Equals [!Ref AlarmSNSTopic, ""]]
+  IncludeRegionAgnosticDNS: !Equals [!Ref RegionAgnosticDNS, "true"]
+
+Resources:
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  RPCALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref RPCALBGroup
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub "*${ServiceName}.rpc.${HostedZone}"
+              - !Sub "*${ServiceName}.rpc.${AWS::Region}.${HostedZone}"
+      ListenerArn:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
+      Priority: !Ref Priority
+  RPCALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8545
+      HealthCheckPort: !Ref ReplicaHealthCheckPort
+      Matcher:
+        HttpCode: "200,429"
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.rpc.${HostedZone}"
+  RPCALBDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.rpc.${HostedZone}"
+      Region: !Sub ${AWS::Region}
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  RPCALBRegionalDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.rpc.${AWS::Region}.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  RPCALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.rpc.${HostedZone}"
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      Region: !Sub ${AWS::Region}
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  GraphQLALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      HealthCheckPort: !Ref GraphqlHealthCheckPort
+      Matcher:
+        HttpCode: "200,403"
+      Port: !Ref GraphQLPort
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.graphql.${HostedZone}"
+  GraphQLALBDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.graphql.${HostedZone}"
+      Region: !Sub ${AWS::Region}
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  GraphQLALBRegionalDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.graphql.${AWS::Region}.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  GraphQLALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.graphql.${HostedZone}"
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      Region: !Sub ${AWS::Region}
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  GraphQLALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref GraphQLALBGroup
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub "*${ServiceName}.graphql.${HostedZone}"
+              - !Sub "*${ServiceName}.graphql.${AWS::Region}.${HostedZone}"
+      ListenerArn:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
+      Priority: !Sub "30${Priority}"
+  WebsocketsALBGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 30
+      UnhealthyThresholdCount: 2
+      HealthyThresholdCount: 5
+      Port: 8546
+      HealthCheckPort: !Ref WSHealthCheckPort
+      Protocol: HTTP
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      Tags:
+        - Key: Service
+          Value: !Sub "${ServiceName}.ws.${HostedZone}"
+  WebsocketsALBDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.ws.${HostedZone}"
+      Region: !Sub ${AWS::Region}
+      HealthCheckId: !Ref DNSHealthCheck
+      Type: A
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  WebsocketsALBRegionalDNS:
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "${ServiceName}.ws.${AWS::Region}.${HostedZone}"
+      Type: A
+      Weight: 1
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  WebsocketsALBWildcardDNS:
+    Condition: IncludeRegionAgnosticDNS
+    Type: "AWS::Route53::RecordSet"
+    Properties:
+      AliasTarget:
+        DNSName:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+        EvaluateTargetHealth: False
+        HostedZoneId:
+          "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+      HostedZoneName: !Sub "${HostedZone}."
+      Name: !Sub "*.${ServiceName}.ws.${HostedZone}"
+      Type: A
+      HealthCheckId: !Ref DNSHealthCheck
+      Region: !Sub ${AWS::Region}
+      SetIdentifier: !Sub "${AWS::StackName}-${AWS::Region}"
+  WebsocketsALBListenerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref WebsocketsALBGroup
+      Conditions:
+        - Field: host-header
+          HostHeaderConfig:
+            Values:
+              - !Sub "*${ServiceName}.ws.${HostedZone}"
+              - !Sub "*${ServiceName}.ws.${AWS::Region}.${HostedZone}"
+      ListenerArn:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
+      Priority: !Sub "40${Priority}"
+  UnHealthyHostCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when more than 1/4 of replicas are unhealthy"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 1
+      Metrics:
+        - Id: healthy
+          MetricStat:
+            Metric:
+              MetricName: "HealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value:
+                    "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: unhealthy
+          MetricStat:
+            Metric:
+              MetricName: "UnHealthyHostCount"
+              Namespace: "AWS/ApplicationELB"
+              Dimensions:
+                - Name: TargetGroup
+                  Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+                - Name: LoadBalancer
+                  Value:
+                    "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "unhealthy - (healthy / 2)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 0
+      TreatMissingData: breaching
+  TargetGroupUnroutableAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when all replicas are unhealthy"
+      ComparisonOperator: "LessThanOrEqualToThreshold"
+      EvaluationPeriods: 1
+      MetricName: "HealthyHostCount"
+      Namespace: "AWS/ApplicationELB"
+      Dimensions:
+        - Name: TargetGroup
+          Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+        - Name: LoadBalancer
+          Value:
+            "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
+      Period: 60
+      Statistic: Maximum
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 0
+      TreatMissingData: breaching
+  DNSHealthCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: CLOUDWATCH_METRIC
+        AlarmIdentifier:
+          Name: !Ref TargetGroupUnroutableAlarm
+          Region: !Sub "${AWS::Region}"
+        InsufficientDataHealthStatus: LastKnownStatus
+
+Outputs:
+  ClusterId:
+    Description: The cluster ID
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+    Export:
+      Name: !Sub "${AWS::StackName}-ClusterId"
+  RPCALBGroup:
+    Description: The ARN of the alb target group for the RPC load balancer
+    Value: !Ref RPCALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroup"
+  RPCALBGroupName:
+    Description: The full name of the alb target group for the RPC load balancer
+    Value: !Sub ${RPCALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBGroupName"
+  RPCALBName:
+    Description: The full name of the RPC load balancer
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBName"
+  ALBGroupList:
+    Description: A comma separated list of ALB Groups associated with this stack
+    Value: !Sub "${RPCALBGroup},${GraphQLALBGroup},${WebsocketsALBGroup}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ALBGroupList"
+  GraphQLALBGroup:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Ref GraphQLALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroup"
+  GraphQLALBGroupName:
+    Description: The ARN of the alb target group for the GraphQL load balancer
+    Value: !Sub ${GraphQLALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-GraphQLALBGroupName"
+  WebsocketsALBGroup:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Ref WebsocketsALBGroup
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroup"
+  WebsocketsALBGroupName:
+    Description: The ARN of the alb target group for the Websockets load balancer
+    Value: !Sub ${WebsocketsALBGroup.TargetGroupFullName}
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsocketsALBGroupName"
+  RPCALBDNS:
+    Description: The DNS of the RPC load balancer
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBDNS"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBDNS"
+  RPCALBListener:
+    Description: The ARN of the RPC load balancer's listener
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBListener"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBListener"
+  RPCALBCanonicalHostedZoneId:
+    Description: The ALB's Canonical hosted zone
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBCanonicalHostedZoneId"
+    Export:
+      Name: !Sub "${AWS::StackName}-RPCALBCanonicalHostedZoneId"
+  VpcId:
+    Description: The VPC the stack is deployed to
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcId"
+  VpcBaseIp:
+    Description: The VpcBaseIp the stack is deployed to
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp"
+    Export:
+      Name: !Sub "${AWS::StackName}-VpcBaseIp"
+  PublicA:
+    Description: The Subnet in availability zone 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicA"
+  PublicB:
+    Description: The Subnet in availability zone 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicB"
+  PublicC:
+    Description: The Subnet in availability zone 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicC"
+  PrivateA:
+    Description: The Subnet in availability zone 'a'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateA"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateA"
+  PrivateB:
+    Description: The Subnet in availability zone 'b'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateB"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateB"
+  PrivateC:
+    Description: The Subnet in availability zone 'c'
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-PrivateC"
+    Export:
+      Name: !Sub "${AWS::StackName}-PrivateC"
+  BaseInfrastructure:
+    Description: The base infrastructure stack identifier
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+    Export:
+      Name: !Sub "${AWS::StackName}-BaseInfrastructure"
+  FreezerBucket:
+    Description: The base infrastructure stack identifier
+    Value:
+      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+    Export:
+      Name: !Sub "${AWS::StackName}-FreezerBucket"

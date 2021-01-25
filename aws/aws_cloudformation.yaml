@@ -1,15 +1,18 @@
 Description: >
- Cloud Formation
+  Cloud Formation
 
 Parameters:
   NestedTemplateURL:
     Type: String
     Default: https://s3.amazonaws.com/aws-database-blog/artifacts/ethereum_smart_contracts/templates/
-    Description: The key prefix for the Amazon S3 bucket where the nested CloudFormation templates are stored. This is available for versioning.
+    Description:
+      The key prefix for the Amazon S3 bucket where the nested CloudFormation templates are stored.
+      This is available for versioning.
 
   EC2KeyPairName:
     Type: AWS::EC2::KeyPair::KeyName
-    Description: The name of an existing EC2 key pair to enable access to EC2 instances in the stack.
+    Description:
+      The name of an existing EC2 key pair to enable access to EC2 instances in the stack.
     ConstraintDescription: Use only a keypair you own in the region
 
   EnvironmentName:
@@ -23,29 +26,36 @@ Parameters:
     Default: 10.0.0.0/16
 
   EthereumPublicSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
+    Description:
+      Please enter the IP range (CIDR notation) for the public subnet in the first Availability Zone
     Type: String
     Default: 10.0.10.0/24
 
   EthereumPublicSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the public subnet in the second Availability Zone
+    Description:
+      Please enter the IP range (CIDR notation) for the public subnet in the second Availability
+      Zone
     Type: String
     Default: 10.0.20.0/24
 
   EthereumPrivateSubnet1CIDR:
-    Description: Please enter the IP range (CIDR notation) for the private subnet in the first Availability Zone
+    Description:
+      Please enter the IP range (CIDR notation) for the private subnet in the first Availability
+      Zone
     Type: String
     Default: 10.0.30.0/24
 
   EthereumPrivateSubnet2CIDR:
-    Description: Please enter the IP range (CIDR notation) for the private subnet in the second Availability Zone
+    Description:
+      Please enter the IP range (CIDR notation) for the private subnet in the second Availability
+      Zone
     Type: String
     Default: 10.0.40.0/24
 
   BastionCIDRforRDP:
     Description: >-
-      IP Cidr from which you are likely to RDP into the instances. You can add
-      rules later by modifying the created security groups. To find your current ip go to http://www.whatismyip.com
+      IP Cidr from which you are likely to RDP into the instances. You can add rules later by
+      modifying the created security groups. To find your current ip go to http://www.whatismyip.com
     Type: String
     MinLength: "9"
     MaxLength: "18"
@@ -154,5 +164,6 @@ Outputs:
     Value: !GetAtt KickStart.Outputs.EthExplorerURL
 
   EthJsonRPCURL:
-    Description: "Use this URL to access the Geth JSON RPC of your Ethereum Clients, or input it into Metamask"
+    Description:
+      "Use this URL to access the Geth JSON RPC of your Ethereum Clients, or input it into Metamask"
     Value: !GetAtt KickStart.Outputs.EthJsonRPCURL

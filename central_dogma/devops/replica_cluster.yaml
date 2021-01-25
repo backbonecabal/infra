@@ -1,0 +1,4120 @@
+Description: A master and pool of replicas for Ether Cattle
+
+Parameters:
+  DiskSize:
+    Default: "250"
+    Description: Size of each node's chaindata storage volume in GiB
+    MaxValue: "1024"
+    MinValue: "8"
+    Type: Number
+  ReplicaImageAMI:
+    Default: ""
+    Description: Custom AMI to use for the replica servers, empty string for default AWS AMI image
+    Type: String
+  ReplicaDiskType:
+    AllowedValues:
+      - standard
+      - gp2
+      - gp3
+      - st1
+      - sc1
+    Default: gp2
+    Description: Replica storage volume type
+    Type: String
+  ReplicaServeHTTP:
+    Description: Enable replica to serve RPC over HTTP
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+  ReplicaServeGraphQL:
+    Description: Enable replica to serve GraphQL over HTTP
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+  ReplicaServeWebsockets:
+    Description: Enable replica to serve Websockets
+    Type: String
+    Default: "true"
+    AllowedValues:
+      - "true"
+      - "false"
+  S3GethBucketName:
+    Default: ethercattle-binaries
+    Type: String
+    Description: The bucket containing EtherCattle Geth Binaries
+  ECGethVersion:
+    Default: v1.9.5-2
+    Type: String
+    Description: The Ether Cattle Geth Version to deploys
+  InfrastructureStack:
+    Type: String
+    Description: The infrastructure stack this cluster connects to
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: The name of the SSH key pair allowed to SSH into the nodes
+  KafkaBrokerURL:
+    Type: String
+    Description: The string of kafka brokers to connect to.
+  KafkaTopic:
+    Type: String
+    Description:
+      A name for the Kafka Topic between the master and replicas. This must be unique for each
+      cluster.
+  NetworkId:
+    Type: String
+    Description:
+      An identifier for the network this cluster represents. This should be common across all
+      clusters representing the same network.
+  SnapshotId:
+    Type: String
+    Description: A snapshot of the Ethereum folder with a synced blockchain
+  MasterSize:
+    Type: String
+    Description:
+      Whether to use full size masters or smaller ones. "full" will use a pool of large instances
+      from the m5(ad) and r5(ad) families. "small" will use a pool of medium instances from the t3
+      and t3a families. For mainnet this must be full - for testnets and private networks it will
+      depend on the network volume.
+    AllowedValues:
+      - full
+      - medium
+      - small
+    Default: full
+  MasterCount:
+    Type: Number
+    Description:
+      The number of Geth masters to run with the cluster. More masters means higher availability and
+      that replicas are likely to be updated faster, but higher replica startup times and more disk
+      usage.
+    Default: 1
+  MasterExtraFlags:
+    Type: String
+    Description: Extra flags for the Geth master (mainly for running other than mainnet)
+  MasterMemoryThresholdLong:
+    Type: Number
+    Default: 75
+    Description: The amount of memory which should trigger alarms if used for > 30 minutes
+  MasterMemoryThresholdLow:
+    Type: Number
+    Default: 10
+    Description: The amount of memory below which an alarm should triger
+  MasterMemoryThresholdHigh:
+    Type: Number
+    Default: 85
+    Description: The amount of memory which should trigger alarms if exceeded for > 1 minute
+  ReplicaExtraFlags:
+    Type: String
+    Description: Extra flags for the Geth replica (mainly for running other than mainnet)
+  ReplicaTargetCapacity:
+    Type: Number
+    Default: 2
+    Description: Minimum number of instances for replicas
+  ReplicaMaxCapacity:
+    Type: Number
+    Default: 5
+    Description: Maximum number of instances for replicas
+  FallbackTargetCapacity:
+    Type: Number
+    Default: 0
+    Description: Minimum number of instances for replicas
+  FallbackMaxCapacity:
+    Type: Number
+    Default: 5
+    Description: Maximum number of instances for replicas
+  ReplicaOnDemandPercentage:
+    Type: Number
+    Default: 0
+    Description:
+      The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  FallbackOnDemandPercentage:
+    Type: Number
+    Default: 100
+    Description:
+      The percentage (0 - 100) of replica that should be on-demand instead of spot instances.
+  ReplicaSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
+  ReplicaCPUScalingTargetValue:
+    Type: Number
+    Default: 80
+    Description: The percentage (0 - 100) CPU utilization target for auto scaling replicas
+  ReplicaSize:
+    Type: String
+    Description:
+      Whether to use full size replicas or smaller ones. "full" will use a pool of large instances
+      from the m5d, m5ad, r5d, and r5ad families. "small" will use a pool of medium instances from
+      the t3 and t3a families. Use "small" if you expect a small request volume.
+    AllowedValues:
+      - full
+      - medium
+      - small
+    Default: full
+  MasterOnDemandPercentage:
+    Type: Number
+    Default: 50
+    Description:
+      The percentage (0 - 100) of masters that should be on-demand instead of spot instances.
+  MasterSpotAllocationStrategy:
+    Type: String
+    AllowedValues:
+      - "lowest-price"
+      - "capacity-optimized"
+    Default: "capacity-optimized"
+  AlternateTargetGroup:
+    Type: String
+    Description:
+      An alternative comma-separated list of target groups that replicas should be assigned to.
+  NotificationEmail:
+    Type: String
+    Description: An optional e-mail address to receive notifications from alarms
+  AlarmSNSTopic:
+    Type: String
+    Description: An optional SNS topic to receive notifications from alarms
+  SnapshotValidationThreshold:
+    Type: Number
+    Default: 10000
+    Description: The number of state trie nodes to validate when taking a snapshot.
+  RemoteRPCURL:
+    Type: String
+    Description:
+      A remote RPC URL to check against local block numbers. If provided, an alarm will go off if
+      this cluster falls significantly behind the specified RPC endpoint. If not specified, an alarm
+      will go off if no blocks are processed in a one minute period.
+  ReplicaExtraSecurityGroup:
+    Type: String
+    Description:
+      An additional security to be assigned to Replicas. Leave this blank unless you need to add
+      additional connectivity rules.
+  DashboardExtension:
+    Type: String
+    Description: The name of a cloudformation output to be added to the dashboard
+  SnapshotScheduleExpression:
+    Type: String
+    Description: A schedule expression for the frequency to take snapshots
+    Default: "cron(55 0/6 * * ? *)"
+  EventsTopic:
+    Type: String
+    Description: A Kafka topic for log data and events
+  FlumeURL:
+    Type: String
+    Description: (optional) The URL of a Flume server for indexed logging
+  FreezerBucket:
+    Type: String
+    Description:
+      (optional) An s3 bucket to use for storing Geth Freezer data. If not provided, the
+      InfrastructureStack's bucket will be used
+  EnableS3Freezer:
+    Type: String
+    Default: "false"
+    AllowedValues:
+      - "true"
+      - "false"
+  S3BackupLogsBucket:
+    Type: String
+    Description:
+      A bucket that has already been created to store logs in. Will create a subirectory flume
+      folder.
+    Default: ""
+  ReplicaClusterVersion:
+    Description:
+      A high level version number for the replica cluster. Used for blue / green deployments
+    Default: "1"
+    Type: String
+  ConsulEc2RetryTagKey:
+    Description: The EC2 instance tag key to filter on when joining to other Consul nodes.
+    Type: String
+    Default: "rivet-consul-cluster"
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  ConsulEc2RetryTagValue:
+    Description: The EC2 instance tag value to filter on when joining to other Consul nodes.
+    Type: String
+    Default: "rivet-consul-member"
+    ConstraintDescription: Must match EC2 Tag Name requirements.
+  ConsulPrimaryRegion:
+    Description: The AWS region of the primary Consul cluster. If not set, defaults to this region.
+    Type: String
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Infrastructure
+        Parameters:
+          - InfrastructureStack
+          - EventsTopic
+          - AlternateTargetGroup
+          - AlarmSNSTopic
+          - NotificationEmail
+          - KeyName
+          - RemoteRPCURL
+          - SnapshotScheduleExpression
+          - DashboardExtension
+          - FlumeURL
+          - FreezerBucket
+          - EnableS3Freezer
+      - Label:
+          default: Cluster
+        Parameters:
+          - KafkaBrokerURL
+          - KafkaTopic
+          - NetworkId
+          - S3GethBucketName
+          - ECGethVersion
+          - SnapshotId
+          - S3BackupLogsBucket
+      - Label:
+          default: Master
+        Parameters:
+          - MasterSize
+          - MasterCount
+          - MasterOnDemandPercentage
+          - MasterSpotAllocationStrategy
+          - MasterExtraFlags
+          - DiskSize
+          - MasterMemoryThresholdLong
+          - MasterMemoryThresholdHigh
+      - Label:
+          default: Replica
+        Parameters:
+          - ReplicaSize
+          - ReplicaImageAMI
+          - ReplicaServeHTTP
+          - ReplicaServeGraphQL
+          - ReplicaServeWebsockets
+          - ReplicaExtraFlags
+          - ReplicaDiskType
+          - ReplicaTargetCapacity
+          - ReplicaMaxCapacity
+          - ReplicaOnDemandPercentage
+          - ReplicaSpotAllocationStrategy
+          - SnapshotValidationThreshold
+          - ReplicaExtraSecurityGroup
+      - Label:
+          default: Fallback
+        Parameters:
+          - FallbackTargetCapacity
+          - FallbackMaxCapacity
+          - FallbackOnDemandPercentage
+    ParameterLabels:
+      S3BackupLogsBucket:
+        default: S3 logs backup bucket
+      MasterSize:
+        default: Master Size
+      DiskSize:
+        default: Disk Size
+      ReplicaImageAMI:
+        default: Replica AMI Image
+      ReplicaServeHTTP:
+        default: Enable Replica RPC HTTP server
+      ReplicaServeGraphQL:
+        default: Enable Replica GraphQL server
+      ReplicaServeWebsockets:
+        default: Enable Replica Websockets server
+      ReplicaDiskType:
+        default: Disk Type
+      S3GethBucketName:
+        default: S3 Geth Bucket
+      ECGethVersion:
+        default: Ether Cattle Geth Version Number
+      InfrastructureStack:
+        default: Infrastructure CloudFormation Stack
+      KeyName:
+        default: SSH Key Pair
+      KafkaBrokerURL:
+        default: Kafka Broker URL
+      KafkaTopic:
+        default: Unique Kafka Topic Name
+      NetworkId:
+        default: Unique Network ID
+      SnapshotId:
+        default: Chaindata Snapshot ID
+      MasterCount:
+        default: Master Count
+      MasterExtraFlags:
+        default: Extra Geth Flags
+      ReplicaExtraFlags:
+        default: Extra Geth Flags
+      ReplicaTargetCapacity:
+        default: Target Capacity
+      ReplicaOnDemandPercentage:
+        default: On-Demand Percentage
+      ReplicaSpotAllocationStrategy:
+        default: Spot Allocation Strategy
+      MasterSpotAllocationStrategy:
+        default: Spot Allocation Strategy
+      ReplicaExtraSecurityGroup:
+        default: Replica Extra Security Group
+      AlternateTargetGroup:
+        default: Alternate Target Group
+      NotificationEmail:
+        default: Notification Email Address
+      AlarmSNSTopic:
+        default: SNS Topic for Alarms
+      SnapshotValidationThreshold:
+        default: Snapshot Validation Threshold
+      RemoteRPCURL:
+        default: Remote RPC URL
+      DashboardExtension:
+        default: Dashboard Extension
+      SnapshotScheduleExpression:
+        default: Snapshot Schedule Expression
+      EventsTopic:
+        default: Events topic
+      FlumeURL:
+        default: Flume URL
+      FallbackOnDemandPercentage:
+        default: Fallback On Demand Percentage
+      FreezerBucket:
+        default: Freezer S3 Bucket
+
+Mappings:
+  InstanceSizes:
+    Master:
+      full:
+        - InstanceType: m4.xlarge
+        - InstanceType: m5a.xlarge
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5.xlarge
+        - InstanceType: m5d.xlarge
+        - InstanceType: m5dn.xlarge
+        - InstanceType: r4.large
+        - InstanceType: r5.large
+        - InstanceType: r5d.large
+        - InstanceType: r5dn.large
+        - InstanceType: r5a.large
+        - InstanceType: r5ad.large
+      medium:
+        - InstanceType: t3.large
+        - InstanceType: t3a.large
+      small:
+        - InstanceType: t3.medium
+        - InstanceType: t3a.medium
+    Replica:
+      full:
+        - InstanceType: r5d.xlarge
+        - InstanceType: r5dn.xlarge
+        - InstanceType: r5ad.xlarge
+        - InstanceType: r5.xlarge
+        - InstanceType: r5n.xlarge
+        - InstanceType: r5a.xlarge
+        - InstanceType: r5b.xlarge
+        # - InstanceType: c5d.xlarge
+        # - InstanceType: c5ad.2xlarge
+      medium:
+        - InstanceType: t3.large
+        - InstanceType: t3a.large
+      small:
+        - InstanceType: t3.medium
+        - InstanceType: t3a.medium
+    Fallback:
+      full:
+        # - InstanceType: i3.2xlarge
+        - InstanceType: c5.4xlarge
+        - InstanceType: c5d.4xlarge
+        - InstanceType: m5d.4xlarge
+        - InstanceType: m5.4xlarge
+        # - InstanceType: c5d.xlarge
+        # - InstanceType: c5ad.2xlarge
+      medium:
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
+      small:
+        - InstanceType: m5ad.xlarge
+        - InstanceType: m5d.xlarge
+  PoolSize:
+    Size:
+      full: 11
+      medium: 6
+      small: 6
+  RegionMap:
+    us-west-1:
+      AL2AMI: ami-056ee704806822732
+    eu-central-1:
+      AL2AMI: ami-0cc293023f983ed53
+    cn-north-1:
+      AL2AMI: ami-0cad3dea07a7c36f9
+    us-east-1:
+      AL2AMI: ami-0b898040803850657
+    ap-northeast-2:
+      AL2AMI: ami-095ca789e0549777d
+    us-gov-west1:
+      AL2AMI: ami-6b157f0a
+    sa-east-1:
+      AL2AMI: ami-058943e7d9b9cabfb
+    ap-northeast-3:
+      AL2AMI: ami-088d713d672ed235e
+    ap-northeast-1:
+      AL2AMI: ami-0c3fd0f5d33134a76
+    ap-southeast-1:
+      AL2AMI: ami-01f7527546b557442
+    us-east-2:
+      AL2AMI: ami-0d8f6eb4f641ef691
+    ap-southeast-2:
+      AL2AMI: ami-0dc96254d5535925f
+    cn-northwest-1:
+      AL2AMI: ami-094b7433620966eb5
+    eu-west-1:
+      AL2AMI: ami-0bbc25e23a7640b9b
+    eu-north-1:
+      AL2AMI: ami-d16fe6af
+    us-gov-east1:
+      AL2AMI: ami-1208ee63
+    ap-south-1:
+      AL2AMI: ami-0d2692b6acea72ee6
+    eu-west-3:
+      AL2AMI: ami-0adcddd3324248c4c
+    eu-west-2:
+      AL2AMI: ami-0d8e27447ec2c8410
+    ca-central-1:
+      AL2AMI: ami-0d4ae09ec9361d8ac
+    us-west-2:
+      AL2AMI: ami-082b5a644766e0e6f
+
+Conditions:
+  HasKeyName: !Not [!Equals [!Ref KeyName, ""]]
+  HasATG: !Not [!Equals [!Ref AlternateTargetGroup, ""]]
+  NoTG: !Equals [!Ref AlternateTargetGroup, "NONE"]
+  ReplicaHDD: !Or [!Equals [!Ref ReplicaDiskType, "st1"], !Equals [!Ref ReplicaDiskType, "sc1"]]
+  SmallDisk:
+    !Or [
+      !Equals [!Ref DiskSize, "75"],
+      !Equals [!Ref DiskSize, "200"],
+      !Equals [!Ref DiskSize, "250"],
+      !Equals [!Ref DiskSize, "300"],
+      !Equals [!Ref DiskSize, "350"],
+      !Equals [!Ref DiskSize, "400"],
+      !Equals [!Ref DiskSize, "450"],
+    ]
+  HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
+  HasSNSTopic: !Not [!Equals [!Ref AlarmSNSTopic, ""]]
+  HasReplicaHTTP: !Equals
+    - !Ref ReplicaServeHTTP
+    - "true"
+  HasReplicaGraphQL: !Equals
+    - !Ref ReplicaServeGraphQL
+    - "true"
+  HasReplicaWebsockets: !Equals
+    - !Ref ReplicaServeWebsockets
+    - "true"
+  HasReplicaImageAMI: !Not [!Equals [!Ref ReplicaImageAMI, ""]]
+  HasRemoteRPCURL: !Not [!Equals [!Ref RemoteRPCURL, ""]]
+  NoRemoteRPCURL: !Equals [!Ref RemoteRPCURL, ""]
+  HasExtraSecurityGroup: !Not [!Equals [!Ref ReplicaExtraSecurityGroup, ""]]
+  SmallMaster: !Equals [!Ref MasterSize, "small"]
+  SmallReplica: !Equals [!Ref ReplicaSize, "small"]
+  HasDashboardExtensions: !Not [!Equals [!Ref DashboardExtension, ""]]
+  HasEventsTopic: !Not [!Equals [!Ref EventsTopic, ""]]
+  HasFlume: !Not [!Equals [!Ref FlumeURL, ""]]
+  MasterSpotLowestPrice: !Equals [!Ref MasterSpotAllocationStrategy, "lowest-price"]
+  ReplicaSpotLowestPrice: !Equals [!Ref ReplicaSpotAllocationStrategy, "lowest-price"]
+  HasFreezerBucket: !Not [!Equals [!Ref FreezerBucket, ""]]
+  EnabledFreezerBucket: !Equals [!Ref EnableS3Freezer, "true"]
+  SpecifiesConsulRegion: !Not [!Equals [!Ref ConsulPrimaryRegion, ""]]
+
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal: { Service: [lambda.amazonaws.com] }
+            Action: ["sts:AssumeRole"]
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+  MulMin:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            var result = parseInt(event.ResourceProperties.Op1) * parseInt(event.ResourceProperties.Op2);
+            if(event.ResourceProperties.Max) {
+              result = Math.min(result, parseInt(event.ResourceProperties.Max));
+            }
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs12.x
+  Max:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        ZipFile: !Sub |
+          var response = require('./cfn-response');
+          exports.handler = function(event, context) {
+            var result = Math.max(parseInt(event.ResourceProperties.Op1), parseInt(event.ResourceProperties.Op2));
+            response.send(event, context, response.SUCCESS, {Value: result});
+          };
+      Runtime: nodejs12.x
+  HDDSize:
+    Type: Custom::Max
+    Properties:
+      ServiceToken: !GetAtt Max.Arn
+      Op1: !Ref DiskSize
+      Op2: 500
+  VolumeIOPS:
+    Type: Custom::MulMin
+    Properties:
+      ServiceToken: !GetAtt MulMin.Arn
+      Op1: !Ref DiskSize
+      Op2: 50
+      Max: 5000
+  MasterLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName:
+        "Fn::Sub":
+          - "/${ClusterId}/${AWS::StackName}/master"
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  MasterNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow internal SSH access and ETH p2p connectivity
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        - IpProtocol: udp
+          FromPort: "30303"
+          ToPort: "30303"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: "30303"
+          ToPort: "30303"
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: udp
+          FromPort: "30301"
+          ToPort: "30301"
+          CidrIp: "0.0.0.0/0"
+  MasterNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - autoscaling.amazonaws.com
+        Version: "2012-10-17"
+  MasterNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref MasterNodeRole
+      PolicyName: !Sub "MasterNode${KafkaTopic}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+            Sid: Stmt3
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - {
+                  "Fn::Sub":
+                    [
+                      "arn:aws:s3:::${Bucket}/*",
+                      {
+                        "Bucket":
+                          !If [
+                            HasFreezerBucket,
+                            !Ref FreezerBucket,
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                          ],
+                      },
+                    ],
+                }
+              - {
+                  "Fn::Sub":
+                    [
+                      "arn:aws:s3:::${Bucket}",
+                      {
+                        "Bucket":
+                          !If [
+                            HasFreezerBucket,
+                            !Ref FreezerBucket,
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                          ],
+                      },
+                    ],
+                }
+            Effect: Allow
+          - Action:
+              - cloudwatch:PutMetricData
+              - ec2:DescribeTags
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - ssm:GetParameter
+            Resource: !Sub "arn:aws:ssm:*:*:parameter/${MetricsConfigParameter}"
+            Effect: Allow
+          - Action:
+              - ec2:ModifyVolume
+              - ec2:DescribeVolumes
+            Effect: Allow
+            Resource: "*"
+  MasterNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+        - !Ref MasterNodeRole
+    DependsOn: MasterNodeRole
+  MetricsConfigParameter:
+    Type: "AWS::SSM::Parameter"
+    Properties:
+      Type: String
+      Value: '{"metrics":{"append_dimensions":{"AutoScalingGroupName":"${aws:AutoScalingGroupName}"},"metrics_collected":{"cpu":{"measurement":["cpu_usage_idle","cpu_usage_user","cpu_usage_system"],"metrics_collection_interval":60,"resources":["*"],"totalcpu":false},"disk":{"measurement":["used_percent","inodes_free"],"metrics_collection_interval":60,"resources":["/var/lib/ethereum","/var/lib/ethereum/overlay","/"]},"diskio":{"measurement":["io_time"],"metrics_collection_interval":60,"resources":["/var/lib/ethereum","/var/lib/ethereum/overlay","/"]},"mem":{"measurement":["mem_used_percent"],"metrics_collection_interval":60},"statsd":{"metrics_aggregation_interval":60,"metrics_collection_interval":10,"service_address":":8125"},"swap":{"measurement":["swap_used_percent"],"metrics_collection_interval":60}}}}'
+
+  MasterLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          setup:
+            - setup_ethercattle_files
+
+        setup_ethercattle_files:
+          files:
+            /root/configure-server.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+                    yum install -y aws-cfn-bootstrap
+
+                    if [ "$(arch)" == "x86_64" ]
+                    then
+                      ARCH="amd64"
+                    elif [ "$(arch)" == "aarch64" ]
+                    then
+                      ARCH="arm64"
+                    fi
+
+                    sysctl -p || true
+
+                    curl "https://awscli.amazonaws.com/awscli-exe-linux-$(arch).zip" -o "awscliv2.zip"
+                    unzip awscliv2.zip
+                    ./aws/install
+
+                    GETH_BIN="geth-linux-$ARCH"
+                    LOGS_BIN="journald-cloudwatch-logs-$ARCH"
+                    aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+                    aws s3 cp s3://${S3GethBucketName}/$LOGS_BIN /usr/local/bin/journald-cloudwatch-logs
+                    aws s3 cp s3://${S3GethBucketName}/peerManagerAuth.py /usr/local/bin/peerManager.py
+                    chmod +x /usr/bin/geth
+                    chmod +x /usr/local/bin/journald-cloudwatch-logs
+                    chmod +x /usr/local/bin/peerManager.py
+                    mkdir -p /var/lib/journald-cloudwatch-logs/
+                    mkdir -p /var/lib/ethereum
+                    mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+                    mkdir -p /var/lib/ethereum/overlay
+                    resize2fs /dev/sdf
+                    useradd -r geth
+
+                    echo "/dev/sdf  /var/lib/ethereum    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+
+                    ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                    cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                    devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                    cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                    localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                    if [ ! -z "$localnvme" ]
+                    then
+                      mkfs.ext4 $localnvme
+                      mount -o barrier=0,data=writeback $localnvme /var/lib/ethereum/overlay
+                      echo "$localnvme  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                    elif [ -e /dev/sdg ]
+                    then
+                      mkfs.ext4 /dev/sdg
+                      mount -o barrier=0,data=writeback /dev/sdg /var/lib/ethereum/overlay
+                      echo "/dev/sdg  /var/lib/ethereum/overlay    ext4   barrier=0,data=writeback,noatime  1   1" >> /etc/fstab
+                    fi
+
+                    chown -R geth /var/lib/ethereum
+
+                    yum install -y https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/$ARCH/latest/amazon-cloudwatch-agent.rpm nmap-ncat jq python-pip jq fio || true
+                    pip install kafka-python
+                    /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c ssm:${MetricsConfigParameter} -s
+
+                    crontab -l >  newcrontab || true
+                    echo "5,20,35,50 * * * * /usr/bin/sh -c 'for x in \$(ls /dev/sd*) ; do echo resizing \$(readlink -f \$x) if needed; /usr/sbin/resize2fs \$(readlink -f \$x) ; done'" >> newcrontab
+                    crontab newcrontab
+
+
+                    printf "[Unit]
+                    Description=journald-cloudwatch-logs
+                    Wants=basic.target
+                    After=basic.target network.target
+
+                    [Service]
+                    ExecStart=/usr/local/bin/journald-cloudwatch-logs /usr/local/etc/journald-cloudwatch-logs.conf
+                    KillMode=process
+                    Restart=on-failure
+                    RestartSec=42s" > /etc/systemd/system/journald-cloudwatch-logs.service
+
+                    echo "geth        hard nofile 500000" >> /etc/security/limits.conf
+                    echo "geth        soft nofile 500000" >> /etc/security/limits.conf
+
+                    systemctl daemon-reload
+
+                    sleep 5 #TODO- workaround for a deadlock on topic creation
+
+
+                    systemctl enable amazon-cloudwatch-agent.service
+                    systemctl start amazon-cloudwatch-agent.service
+                    systemctl enable journald-cloudwatch-logs
+                    systemctl start journald-cloudwatch-logs
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    ReplicaHTTPFlag:
+                      !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                    ReplicaGraphQLFlag:
+                      # Wow that's a lot of escaping!
+                      !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    ReplicaWebsocketsFlag:
+                      !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                    BaseInfrastructure:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+                    EventsTopicFlag:
+                      !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+              mode: "000700"
+              owner: root
+              group: root
+            /root/service-configs.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+
+                    SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
+                    SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                    KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\\\&^g')"
+
+                    if [ -e /dev/sdg ]
+                    then
+                      OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                    fi
+                    ignore="$(readlink -f /dev/sd*) $(readlink -f /dev/xvd*)"
+                    cutignore="$(for x in $ignore ; do echo $x | cut -c -12; done | uniq)"
+                    devices="$(ls /dev/nvme* | grep -E 'n1$')"
+                    cutdevices="$(for x in $devices ; do echo $x | cut -c -12; done | uniq)"
+                    localnvme=$(for d in $cutdevices; do if ! $(echo "$cutignore"| grep -q $d) ; then echo $d; fi ; done)
+                    if [ ! -z "$localnvme" ]
+                    then
+                      OVERLAY_FLAG="--datadir.overlay=/var/lib/ethereum/overlay"
+                    fi
+
+                    totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                    allocatesafe=$((totalm * 75 / 100))
+
+                    printf "KafkaHostname=${KafkaBrokerURL}
+                    KafkaTopic=${KafkaTopic}
+                    NetworkId=${NetworkId}
+                    infraName=${InfrastructureStack}
+                    baseInfraName=${BaseInfrastructure}
+                    network=${NetworkId}
+                    ReplicaClusterVersion=${ReplicaClusterVersion}
+                    AWS_REGION=${AWS::Region}
+                    LOG_BLOCK_LIMIT=10000
+                    FLUME_URL=${FlumeURL}" > /etc/systemd/system/ethcattle-vars
+
+
+                    printf "[Unit]
+                    Description=Ethereum go client replica
+                    After=syslog.target network.target
+                    [Service]
+                    User=geth
+                    Group=geth
+                    Environment=HOME=/var/lib/ethereum
+                    EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                    Type=simple
+                    LimitNOFILE=655360
+                    ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                    ExecStart=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=\$infraName-txpool  --kafka.tx.topic=\$NetworkId-tx --replica.startup.age=45  ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                    TimeoutStopSec=90
+                    Restart=on-failure
+                    TimeoutStartSec=86400
+                    RestartSec=10s
+                    [Install]
+                    WantedBy=multi-user.target
+                    " > /etc/systemd/system/geth-replica.service
+
+                    printf "[Unit]
+                    Description=Ethereum go client replica
+                    After=syslog.target network.target
+                    [Service]
+                    User=geth
+                    Group=geth
+                    Environment=HOME=/var/lib/ethereum
+                    EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                    Type=simple
+                    LimitNOFILE=655360
+                    # ExecStartPre=/usr/bin/geth replica ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr || true
+                    ExecStart=/usr/bin/bash -c '/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags}  $OVERLAY_FLAG  --cache=$allocatesafe ${FreezerFlags} --datadir=/var/lib/ethereum --light.maxpeers 0 --maxpeers 25 ${ReplicaHTTPFlag} ${ReplicaGraphQLFlag} ${ReplicaWebsocketsFlag}'
+                    TimeoutStopSec=90
+                    TimeoutStartSec=86400
+                    RestartSec=10s
+                    [Install]
+                    WantedBy=multi-user.target
+                    " > /etc/systemd/system/geth-fallback.service
+
+
+                    printf "[Unit]
+                    Description=Ethereum go client
+                    After=syslog.target network.target
+
+                    [Service]
+                    User=geth
+                    Group=geth
+                    Environment=HOME=/var/lib/ethereum
+                    EnvironmentFile=/etc/systemd/system/ethcattle-vars
+                    Type=simple
+                    LimitNOFILE=655360
+                    ExecStartPre=/usr/bin/bash -c '/usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --kafka.broker=$KAFKA_ESCAPED_URL""$SEP_ESCAPED""fetch.default=8388608\\&max.waittime=25\\&avoid_leader=1  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown 2>>/tmp/geth-stderr'
+                    ExecStart=/usr/bin/geth ${MasterExtraFlags} ${FreezerFlags} $OVERLAY_FLAG --light.maxpeers 0 --maxpeers 25 --gcmode=archive --kafka.broker=${KafkaBrokerURL}""$SEP""net.maxopenrequests=1\&message.send.max.retries=20000  --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --kafka.txpool.topic=${InfrastructureStack}-txpool ${EventsTopicFlag}
+                    TimeoutStartSec=86400
+                    TimeoutStopSec=90
+                    OnFailure=poweroff.target
+
+                    [Install]
+                    WantedBy=multi-user.target
+                    " > /etc/systemd/system/geth-master.service
+
+
+                    printf "[Unit]
+                    Description=Ethereum go client transaction relay
+                    After=syslog.target network.target geth
+
+                    [Service]
+                    User=geth
+                    Group=geth
+                    Environment=HOME=/var/lib/ethereum
+                    Type=simple
+                    ExecStart=/usr/bin/geth txrelay --kafka.broker=${KafkaBrokerURL} --kafka.tx.topic=${NetworkId}-tx --kafka.tx.consumergroup=${KafkaTopic}-cg /var/lib/ethereum/geth.ipc
+                    TimeoutStopSec=90
+                    Restart=on-failure
+                    RestartSec=10s
+
+                    [Install]
+                    WantedBy=multi-user.target
+                    " > /etc/systemd/system/geth-tx.service
+
+                    printf "[Unit]
+                    Description=Geth Peer Monitoring
+                    After=syslog.target network.target geth
+
+                    [Service]
+                    User=geth
+                    Group=geth
+                    Environment=HOME=/var/lib/ethereum
+                    Type=simple
+                    ExecStart=/usr/local/bin/peerManager.py /var/lib/ethereum/geth.ipc ${NetworkId}-peerlist ${KafkaBrokerURL}
+                    KillMode=process
+                    TimeoutStopSec=90
+                    Restart=on-failure
+                    RestartSec=10s
+                    " > /etc/systemd/system/geth-peer-data.service
+
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    ReplicaHTTPFlag:
+                      !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                    ReplicaGraphQLFlag:
+                      # Wow that's a lot of escaping!
+                      !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    ReplicaWebsocketsFlag:
+                      !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                    BaseInfrastructure:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+                    EventsTopicFlag:
+                      !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+              mode: "000700"
+              owner: root
+              group: root
+            /root/start-master.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+                    printf "log_group = \"${MasterLG}\"
+                    state_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                    rm -f /var/lib/ethereum/geth/nodekey || true
+                    rm /var/lib/ethereum/geth.ipc || true
+                    rm /etc/systemd/system/geth.service || true
+                    ln -s /etc/systemd/system/geth-master.service /etc/systemd/system/geth.service
+                    systemctl daemon-reload
+                    systemctl enable geth-master.service
+                    systemctl enable geth-tx.service
+                    systemctl enable geth-peer-data.service
+
+                    systemctl start geth-master.service || true &
+                    sleep 5
+                    systemctl start geth-tx.service
+                    systemctl start geth-peer-data.service
+
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    ReplicaHTTPFlag:
+                      !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                    ReplicaGraphQLFlag:
+                      # Wow that's a lot of escaping!
+                      !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    ReplicaWebsocketsFlag:
+                      !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                    BaseInfrastructure:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+                    EventsTopicFlag:
+                      !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+              mode: "000700"
+              owner: root
+              group: root
+            /root/start-replica.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+
+                    printf "log_group = \"${ReplicaLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                    rm /var/lib/ethereum/geth.ipc || true
+                    rm /etc/systemd/system/geth.service || true
+                    ln -s /etc/systemd/system/geth-replica.service /etc/systemd/system/geth.service
+                    systemctl daemon-reload
+                    systemctl enable geth-replica.service
+                    systemctl start geth-replica.service
+
+                    /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
+
+                    if [ -f /usr/bin/replica-hook ]
+                    then
+                    /usr/bin/replica-hook
+                    fi
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    ReplicaHTTPFlag:
+                      !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                    ReplicaGraphQLFlag:
+                      # Wow that's a lot of escaping!
+                      !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    ReplicaWebsocketsFlag:
+                      !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                    BaseInfrastructure:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+                    EventsTopicFlag:
+                      !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+              mode: "000700"
+              owner: root
+              group: root
+            /root/start-fallback.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+
+                    printf "log_group = \"${FallBackLG}\"\nstate_file = \"/var/lib/journald-cloudwatch-logs/state\"" > /usr/local/etc/journald-cloudwatch-logs.conf
+
+                    rm /var/lib/ethereum/geth.ipc || true
+                    rm /etc/systemd/system/geth.service || true
+                    ln -s /etc/systemd/system/geth-fallback.service /etc/systemd/system/geth.service
+                    systemctl daemon-reload
+                    systemctl enable geth-fallback.service
+                    systemctl start geth-fallback.service
+
+                    /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ReplicaLaunchTemplate --configsets cs_install --region ${AWS::Region}
+
+                    if [ -f /usr/bin/replica-hook ]
+                    then
+                    /usr/bin/replica-hook
+                    fi
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    ReplicaHTTPFlag:
+                      !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                    ReplicaGraphQLFlag:
+                      # Wow that's a lot of escaping!
+                      !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    ReplicaWebsocketsFlag:
+                      !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                    BaseInfrastructure:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+                    EventsTopicFlag:
+                      !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+              mode: "000700"
+              owner: root
+              group: root
+            /root/loadtest-disk.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+                    fio --filename=/dev/sdf --rw=read --bs=128k --iodepth=32 --ioengine=libaio --prio=7 --prioclass=3 --thinktime=2 --rate_iops=4000 --direct=1 --name=volume-initialize &
+                    export AWS_DEFAULT_REGION=${AWS::Region}
+                    VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+                    wait
+                    /usr/local/bin/aws ec2 modify-volume --volume-id $VOLUME_ID --volume-type gp3 --iops 3000 --throughput 125 &
+
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    ReplicaHTTPFlag:
+                      !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                    ReplicaGraphQLFlag:
+                      # Wow that's a lot of escaping!
+                      !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                    ReplicaWebsocketsFlag:
+                      !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                    BaseInfrastructure:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+                    EventsTopicFlag:
+                      !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+              mode: "000700"
+              owner: root
+              group: root
+
+    Properties:
+      LaunchTemplateData:
+        ImageId:
+          !If [
+            HasReplicaImageAMI,
+            !Ref ReplicaImageAMI,
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+          ]
+        InstanceType: m5.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Master"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Master"
+        SecurityGroupIds:
+          - !Sub ${MasterNodeSecurityGroup.GroupId}
+        IamInstanceProfile:
+          Name: !Ref MasterNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref "AWS::NoValue"]
+        CreditSpecification: !If [SmallMaster, { CpuCredits: standard }, !Ref "AWS::NoValue"]
+        BlockDeviceMappings:
+          - DeviceName: "/dev/xvda"
+            Ebs:
+              VolumeSize: 8
+              VolumeType: gp2
+          - DeviceName: "/dev/sdf"
+            Ebs:
+              VolumeSize: !Ref DiskSize
+              VolumeType: io1
+              Iops: !GetAtt VolumeIOPS.Value
+              # VolumeType: gp3
+              # Iops: 4000
+              # Throughput: 1000
+              SnapshotId: !Ref SnapshotId
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
+                /root/service-configs.sh
+                /root/configure-server.sh
+                /root/start-master.sh
+                /root/loadtest-disk.sh
+              - ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                EventsTopicFlag: !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
+                FreezerFlags:
+                  !If [
+                    EnabledFreezerBucket,
+                    {
+                      "Fn::Sub":
+                        [
+                          "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                          {
+                            Bucket:
+                              !If [
+                                HasFreezerBucket,
+                                !Ref FreezerBucket,
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                              ],
+                          },
+                        ],
+                    },
+                    "",
+                  ]
+
+  MasterAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+      # LaunchTemplate:
+      #   LaunchTemplateId: !Ref MasterLaunchTemplate
+      #   Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
+      MinSize: !Ref MasterCount
+      MaxSize: 7
+      HealthCheckType: EC2
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          SpotAllocationStrategy: !Ref MasterSpotAllocationStrategy
+          OnDemandPercentageAboveBaseCapacity: !Ref MasterOnDemandPercentage
+          SpotInstancePools:
+            !If [
+              MasterSpotLowestPrice,
+              !FindInMap [PoolSize, Size, !Ref MasterSize],
+              !Ref "AWS::NoValue",
+            ]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref MasterLaunchTemplate
+            Version: !Sub ${MasterLaunchTemplate.LatestVersionNumber}
+          Overrides: !FindInMap [InstanceSizes, Master, !Ref MasterSize]
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupInServiceInstances
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Master
+          PropagateAtLaunch: "true"
+
+  AggregatedNotifications:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Aggregated Notifications
+  AggregatedNotificationsSubscription:
+    Type: AWS::SNS::Subscription
+    Condition: HasNotificationEmail
+    Properties:
+      Endpoint: !Ref NotificationEmail
+      Protocol: email
+      TopicArn: !Ref AggregatedNotifications
+  ReplicaOverlayDiskSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Replica Overlay Disk
+  ReplicaDiskOverlayAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ReplicaOverlayDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the overlay data directory > 95% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: nvme
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref ReplicaAutoScalingGroup
+                - Name: device
+                  Value: "nvme2n1"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum/overlay"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme0
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref ReplicaAutoScalingGroup
+                - Name: device
+                  Value: "nvme0n1"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum/overlay"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: ebs
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref ReplicaAutoScalingGroup
+                - Name: device
+                  Value: "nvme1n1"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum/overlay"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref ReplicaOverlayDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref ReplicaOverlayDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 95
+      TreatMissingData: missing
+  ReplicaCPUSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master Disk
+  ReplicasCPUAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref ReplicaCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the replica CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref ReplicaAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref ReplicaCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 10
+      DatapointsToAlarm: 7
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref ReplicaCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 80
+      TreatMissingData: missing
+  MasterDiskSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master Disk
+  MasterDiskAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the master data directory > 95% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: xvdf
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value: "xvdf"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme1n1
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value: "nvme1n1"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 95
+      TreatMissingData: missing
+  MasterDiskAlarmEmergency:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the master data directory > 98% full"
+      ComparisonOperator: "GreaterThanThreshold"
+      Metrics:
+        - Id: xvdf
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value: "xvdf"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: NVME Overlay Volume Disk Usage
+          ReturnData: false
+        - Id: nvme1n1
+          MetricStat:
+            Metric:
+              MetricName: "disk_used_percent"
+              Namespace: CWAgent
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref MasterAutoScalingGroup
+                - Name: device
+                  Value: "nvme1n1"
+                - Name: fstype
+                  Value: "ext4"
+                - Name: path
+                  Value: "/var/lib/ethereum"
+            Period: 60
+            Stat: Maximum
+          Label: EBS Overlay Disk Usage
+          ReturnData: false
+        - Id: delta
+          Expression: "MAX(METRICS())"
+      InsufficientDataActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      OKActions:
+        - !Ref MasterDiskSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 98
+      TreatMissingData: missing
+  MasterMemSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master RAM
+  MasterMemAlarmLong:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription:
+        !Sub "Alarms when the master RAM > ${MasterMemoryThresholdLong} for 30 minutes"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 30
+      DatapointsToAlarm: 28
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Maximum
+      Threshold: !Ref MasterMemoryThresholdLong
+      TreatMissingData: missing
+  MasterMemAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription:
+        !Sub "Alarms when the master RAM < ${MasterMemoryThresholdLow} for 5 minutes"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Minimum
+      Threshold: !Ref MasterMemoryThresholdLow
+      TreatMissingData: missing
+  MasterMemAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription:
+        !Sub "Alarms when the master RAM > ${MasterMemoryThresholdHigh} for 5 minutes%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      MetricName: "mem_used_percent"
+      Namespace: CWAgent
+      OKActions:
+        - !Ref MasterMemSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Maximum
+      Threshold: !Ref MasterMemoryThresholdHigh
+      TreatMissingData: missing
+  MasterCPUSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master RAM
+  MasterCPUAlarmLong:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the master CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 30
+      DatapointsToAlarm: 28
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 80
+      TreatMissingData: missing
+  MasterCPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the master CPU > 80%"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref MasterAutoScalingGroup
+      InsufficientDataActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      MetricName: "CPUUtilization"
+      Namespace: AWS/EC2
+      OKActions:
+        - !Ref MasterCPUSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 95
+      TreatMissingData: missing
+  MasterPeerCountSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Master Peer Count
+  MasterPeerCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the master PeerCount < 10"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value: !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      MetricName: "peerCount"
+      Namespace: BlockData
+      OKActions:
+        - !Ref MasterPeerCountSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Maximum
+      Threshold: 10
+      TreatMissingData: missing
+  MissingTrieNodeAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when missingTrie > 1000"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value: !Ref KafkaTopic
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 1
+      MetricName: "trieMissing"
+      Namespace: ReplicaData
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 60
+      Statistic: Sum
+      Threshold: 1000
+      TreatMissingData: notBreaching
+
+  ReplicaCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref ReplicaAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: !Ref ReplicaTargetCapacity
+      TreatMissingData: missing
+  MasterCountAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: !Sub "Alarms when the number of replicas < desired capacity"
+      ComparisonOperator: "LessThanThreshold"
+
+      InsufficientDataActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      EvaluationPeriods: 5
+      DatapointsToAlarm: 2
+      Metrics:
+        - Id: instances
+          MetricStat:
+            Metric:
+              MetricName: "GroupInServiceInstances"
+              Namespace: AWS/AutoScaling
+              Dimensions:
+                - Name: AutoScalingGroupName
+                  Value: !Ref MasterAutoScalingGroup
+            Period: 60
+            Stat: Minimum
+          Label: Instances
+          ReturnData: false
+        - Id: measured
+          Expression: "(instances + 1)"
+      OKActions:
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: !Ref MasterCount
+      TreatMissingData: missing
+  MasterLogMetricsFunctionLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Join ["", ["/aws/lambda/", !Ref MasterLogMetricsFunction]]
+  ReplicaLogMetricsFunctionLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName: !Join ["", ["/aws/lambda/", !Ref ReplicaLogMetricsFunction]]
+
+  LogMetricsRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: "2012-10-17"
+  LogMetricsFunctionPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref LogMetricsRole
+      PolicyName: !Sub "MasterLogMetrics${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogStream"
+              - "logs:PutLogEvents"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "cloudwatch:PutMetricData"
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - "logs:CreateLogGroup"
+            Resource: !Sub "arn:aws:logs:${AWS::Region}:${AWS::AccountId}:*"
+  MasterLogMetricsFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "A lambda function to process Geth logs into metrics"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Sub ${KafkaTopic}
+      Handler: "logMonitor.masterHandler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+  MasterLogMetricsSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub ${MasterLogMetricsFunction.Arn}
+      FilterPattern: '{$.systemdUnit = "geth.service" || $.systemdUnit = "geth-peer-data.service"}'
+      LogGroupName: !Ref MasterLG
+  MasterLogMetricFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${MasterLogMetricsFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: !Sub logs.${AWS::Region}.amazonaws.com
+      SourceAccount: !Ref "AWS::AccountId"
+      SourceArn: !Sub ${MasterLG.Arn}
+
+  MasterBlockAgeSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Block Age
+  MasterBlockAgeAlarm:
+    Condition: NoRemoteRPCURL
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockAgeSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the block age > 120"
+      ComparisonOperator: "GreaterThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value: !Ref KafkaTopic
+      EvaluationPeriods: 3
+      MetricName: "age"
+      Namespace: BlockData
+      OKActions:
+        - !Ref MasterBlockAgeSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 30
+      Statistic: Maximum
+      Threshold: 120
+      TreatMissingData: ignore
+
+  MasterBlockNumberSNS:
+    Type: AWS::SNS::Topic
+    Properties:
+      DisplayName: Block Number
+  MasterBlockNumberAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: NoRemoteRPCURL
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "LessThanThreshold"
+      Dimensions:
+        - Name: clusterId
+          Value: !Ref KafkaTopic
+      EvaluationPeriods: 3
+      MetricName: "number"
+      Namespace: BlockData
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Period: 30
+      Statistic: SampleCount
+      Threshold: 1
+      TreatMissingData: breaching
+  MasterBlockNumberComparisonAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasRemoteRPCURL
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: remote
+          MetricStat:
+            Metric:
+              MetricName: "RemoteBlockNumber"
+              Namespace: BlockData
+              Dimensions:
+                - Name: provider
+                  Value: !Ref RemoteRPCURL
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: cluster
+          MetricStat:
+            Metric:
+              MetricName: "number"
+              Namespace: BlockData
+              Dimensions:
+                - Name: clusterId
+                  Value: !Ref KafkaTopic
+            Period: 60
+            Stat: Maximum
+          Label: Cluster Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "(remote - cluster)"
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 1
+      TreatMissingData: breaching
+  FlumeBlockNumberComparisonAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: HasFlume
+    Properties:
+      AlarmActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      AlarmDescription: "Alarms when the block number is missing"
+      ComparisonOperator: "GreaterThanThreshold"
+      EvaluationPeriods: 2
+      Metrics:
+        - Id: flume
+          MetricStat:
+            Metric:
+              MetricName: "block"
+              Namespace: FlumeData
+              Dimensions:
+                - Name: clusterId
+                  Value: !Ref NetworkId
+            Period: 60
+            Stat: Maximum
+          Label: Remote Block Number
+          ReturnData: false
+        - Id: cluster
+          MetricStat:
+            Metric:
+              MetricName: "number"
+              Namespace: BlockData
+              Dimensions:
+                - Name: clusterId
+                  Value: !Ref KafkaTopic
+            Period: 60
+            Stat: Maximum
+          Label: Cluster Block Number
+          ReturnData: false
+        - Id: delta
+          Expression: "(cluster - flume)"
+      OKActions:
+        - !Ref MasterBlockNumberSNS
+        - !Ref AggregatedNotifications
+        - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+      Threshold: 2
+      TreatMissingData: breaching
+
+  ReplicaLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName:
+        "Fn::Sub":
+          - "/${ClusterId}/${AWS::StackName}/replica"
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  ReplicaNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow internal SSH access and VPC access to RPC
+      VpcId:
+        "Fn::ImportValue": !Sub "${InfrastructureStack}-VpcId"
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: "22"
+          ToPort: "22"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        - IpProtocol: tcp
+          FromPort: "8545"
+          ToPort: "8545"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        - IpProtocol: tcp
+          # Consul sidecar proxy ports
+          FromPort: "21000"
+          ToPort: "21016"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        - IpProtocol: tcp
+          # Consul agent gossip
+          FromPort: "8301"
+          ToPort: "8301"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        - IpProtocol: udp
+          # Consul agent gossip
+          FromPort: "8301"
+          ToPort: "8301"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/14"]]
+        - IpProtocol: tcp
+          FromPort: "8546"
+          ToPort: "8546"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+        - IpProtocol: tcp
+          FromPort: "8547"
+          ToPort: "8547"
+          CidrIp:
+            !Join ["", ["Fn::ImportValue": !Sub "${InfrastructureStack}-VpcBaseIp", ".0.0/16"]]
+  ReplicaNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - autoscaling.amazonaws.com
+        Version: "2012-10-17"
+  ReplicaNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref ReplicaNodeRole
+      PolicyName: !Sub "ReplicaNode${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: "ec2:DescribeInstances"
+            Resource: "*"
+          - Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+            Effect: Allow
+            Resource: "*"
+            Sid: Stmt3
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - {
+                  "Fn::Sub":
+                    [
+                      "arn:aws:s3:::${Bucket}/*",
+                      {
+                        "Bucket":
+                          !If [
+                            HasFreezerBucket,
+                            !Ref FreezerBucket,
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                          ],
+                      },
+                    ],
+                }
+              - {
+                  "Fn::Sub":
+                    [
+                      "arn:aws:s3:::${Bucket}",
+                      {
+                        "Bucket":
+                          !If [
+                            HasFreezerBucket,
+                            !Ref FreezerBucket,
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                          ],
+                      },
+                    ],
+                }
+            Effect: Allow
+          - Action:
+              - cloudwatch:PutMetricData
+              - ec2:DescribeTags
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+            Resource: "*"
+            Effect: Allow
+          - Action:
+              - ssm:GetParameter
+            Resource: !Sub "arn:aws:ssm:*:*:parameter/${MetricsConfigParameter}"
+            Effect: Allow
+          - Action:
+              - ec2:ModifyVolume
+              - ec2:DescribeVolumes
+            Effect: Allow
+            Resource: "*"
+  ReplicaNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+        - !Ref ReplicaNodeRole
+    DependsOn: ReplicaNodeRole
+
+  ReplicaLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          cs_install:
+            - install_and_enable_cfn_hup
+            - create_consul_group_user_dir
+            - install_consul
+            - install_consul_template
+            - consul_bootstrap
+        install_and_enable_cfn_hup:
+          files:
+            /etc/cfn/cfn-hup.conf:
+              content: !Join
+                - ""
+                - - |
+                    [main]
+                  - stack=
+                  - !Ref "AWS::StackId"
+                  - |+
+
+                  - region=
+                  - !Ref "AWS::Region"
+                  - |+
+              mode: "000400"
+              owner: root
+              group: root
+            /etc/cfn/hooks.d/cfn-auto-reloader.conf:
+              content: !Join
+                - ""
+                - - |
+                    [cfn-auto-reloader-hook]
+                  - |
+                    triggers=post.update
+                  - >
+                    path=Resources.ReplicaLaunchTemplate.Metadata.AWS::CloudFormation::Init
+                  - "action=/usr/local/bin/cfn-init -v "
+                  - "         --stack "
+                  - !Ref "AWS::StackName"
+                  - "         --resource ReplicaLaunchTemplate "
+                  - "         --configsets cs_install "
+                  - "         --region "
+                  - !Ref "AWS::Region"
+                  - |+
+
+                  - |
+                    runas=root
+            /lib/systemd/system/cfn-hup.service:
+              content: !Join
+                - ""
+                - - |
+                    [Unit]
+                  - |+
+                    Description=cfn-hup daemon
+
+                  - |
+                    [Service]
+                  - |
+                    Type=simple
+                  - |
+                    ExecStart=/usr/local/bin/cfn-hup
+                  - |+
+                    Restart=always
+                  - |
+                    [Install]
+                  - WantedBy=multi-user.target
+          commands:
+            01enable_cfn_hup:
+              command: systemctl enable cfn-hup.service
+            02start_cfn_hup:
+              command: systemctl start cfn-hup.service
+        create_consul_group_user_dir:
+          users:
+            consul:
+              homeDir: /srv/consul
+          commands:
+            01_create_data_dir:
+              command: mkdir -p /opt/consul/data
+        install_consul:
+          sources:
+            /usr/bin/: https://releases.hashicorp.com/consul/1.7.0/consul_1.7.0_linux_amd64.zip
+        install_consul_template:
+          sources:
+            /usr/bin/: https://releases.hashicorp.com/consul-template/0.24.0/consul-template_0.24.0_linux_amd64.zip
+        consul_bootstrap:
+          files:
+            /opt/consul/config/client.json:
+              content:
+                "Fn::Sub":
+                  - |
+                    {
+                      "advertise_addr": "PrivateIpAddress",
+                      "bind_addr": "PrivateIpAddress",
+                      "node_name": "InstanceId",
+                      "datacenter": "${AWS::Region}",
+                      "server": false,
+                      "ui" : false,
+                      "leave_on_terminate" : true,
+                      "skip_leave_on_interrupt" : false,
+                      "disable_update_check": true,
+                      "log_level": "warn",
+                      "enable_local_script_checks": true,
+                      "data_dir": "/opt/consul/data",
+                      "client_addr": "0.0.0.0",
+                      "primary_datacenter": "${PrimaryRegion}",
+                      "retry_join": ["provider=aws region=${AWS::Region} tag_key=${ConsulEc2RetryTagKey} tag_value=${ConsulEc2RetryTagValue}"],
+                      "addresses": {
+                        "http": "0.0.0.0"
+                      },
+                      "ports": { "grpc": 8502 },
+                      "connect": {
+                        "enabled": true
+                      }
+                    }
+                  - PrimaryRegion:
+                      !If [SpecifiesConsulRegion, !Ref ConsulPrimaryRegion, !Sub "${AWS::Region}"]
+              mode: 000644
+            /etc/systemd/system/consul.service:
+              content: !Join
+                - ""
+                - - |
+                    [Unit]
+                  - |
+                    Description="HashiCorp Consul - A service mesh solution"
+                  - |
+                    Documentation=https://www.consul.io/
+                  - |
+                    Requires=network-online.target
+                  - |
+                    After=network-online.target
+                  - |
+                    ConditionFileNotEmpty=/opt/consul/config/client.json
+                  - |+
+                    [Service]
+                  - |
+                    Type=notify
+                  - |
+                    User=consul
+                  - |
+                    Group=consul
+                  - |
+                    ExecStart=/usr/bin/consul agent -config-dir /opt/consul/config -data-dir /opt/consul/data
+                  - |
+                    ExecReload=/usr/bin/consul reload
+                  - |
+                    KillMode=process
+                  - |
+                    Restart=on-failure
+                  - |
+                    TimeoutSec=300s
+                  - |
+                    LimitNOFILE=65536
+                  - |+
+                    [Install]
+                  - WantedBy=multi-user.target
+          commands:
+            00_fill_consul_config_ip:
+              command:
+                myip=`echo $(curl -s http://169.254.169.254/latest/meta-data/local-ipv4)` && sed -i
+                "s/PrivateIpAddress/${myip}/g" /opt/consul/config/client.json
+            01_fill_consul_config_instance_id:
+              command:
+                myid=`echo $(curl -s http://169.254.169.254/latest/meta-data/instance-id)` && sed -i
+                "s/InstanceId/${myid}/g" /opt/consul/config/client.json
+            02_change_ownership:
+              command: chown -R consul:consul /opt/consul
+            03_reload_systemd:
+              command: systemctl daemon-reload
+            04_enable_consul:
+              command: systemctl enable consul
+            05_start_consul:
+              command: systemctl start consul
+            06_get_envoy:
+              command: curl -L https://getenvoy.io/cli | bash -s -- -b /usr/local/bin
+            07_fetch_envoy:
+              command: /usr/local/bin/getenvoy fetch standard:1.13.1
+            08_install_envoy:
+              command:
+                mv /root/.getenvoy/builds/standard/1.13.1/linux_glibc/bin/envoy /usr/bin/envoy
+    Properties:
+      LaunchTemplateData:
+        ImageId:
+          !If [
+            HasReplicaImageAMI,
+            !Ref ReplicaImageAMI,
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+          ]
+        InstanceType: m5ad.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Replica"
+              - Key: VOLUME_MGMT_GROUP
+                Value: !Sub ${AWS::StackName}
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Replica"
+        SecurityGroupIds:
+          - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+          - !If [HasExtraSecurityGroup, !Ref ReplicaExtraSecurityGroup, !Ref "AWS::NoValue"]
+        IamInstanceProfile:
+          Name: !Ref ReplicaNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref "AWS::NoValue"]
+        CreditSpecification: !If [SmallReplica, { CpuCredits: standard }, !Ref "AWS::NoValue"]
+        BlockDeviceMappings:
+          - DeviceName: "/dev/xvda"
+            Ebs:
+              VolumeSize: 8
+              VolumeType: gp2
+          - DeviceName: "/dev/sdf"
+            Ebs:
+              VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
+              VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+              Iops: !If [ReplicaHDD, !Ref "AWS::NoValue", !GetAtt VolumeIOPS.Value]
+              # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+              # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+              # Throughput: !If [ReplicaHDD, !Ref 'AWS::NoValue', 1000 ]
+              SnapshotId: !Ref SnapshotId
+          - !If [
+              SmallReplica,
+              {
+                DeviceName: "/dev/sdg",
+                Ebs: { VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125 },
+              },
+              {
+                DeviceName: "/dev/sdg",
+                Ebs: { VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125 },
+              },
+            ]
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
+                /root/service-configs.sh
+                /root/configure-server.sh
+                /root/start-replica.sh
+                /root/loadtest-disk.sh
+              - ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                ReplicaHTTPFlag:
+                  !If [HasReplicaHTTP, "--http --http.addr 0.0.0.0 --http.port 8545", ""]
+                ReplicaGraphQLFlag:
+                  # Wow that's a lot of escaping!
+                  !If [HasReplicaGraphQL, "--graphql --graphql.vhosts \\\\\\'*\\\\\\'", ""]
+                ReplicaWebsocketsFlag:
+                  !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                FreezerFlags:
+                  !If [
+                    EnabledFreezerBucket,
+                    {
+                      "Fn::Sub":
+                        [
+                          "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                          {
+                            Bucket:
+                              !If [
+                                HasFreezerBucket,
+                                !Ref FreezerBucket,
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                              ],
+                          },
+                        ],
+                    },
+                    "",
+                  ]
+
+  ReplicaAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      # AdjustmentType: String
+      AutoScalingGroupName: !Ref ReplicaAutoScalingGroup
+      # Cooldown: 900
+      EstimatedInstanceWarmup: 600
+      # MetricAggregationType: String
+      # MinAdjustmentMagnitude: Integer
+      PolicyType: TargetTrackingScaling
+      # ScalingAdjustment: Integer
+      # StepAdjustments:
+      #   - StepAdjustment
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref ReplicaCPUScalingTargetValue
+
+  ReplicaAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: !Ref ReplicaOnDemandPercentage
+          SpotAllocationStrategy: !Ref ReplicaSpotAllocationStrategy
+          SpotInstancePools:
+            !If [
+              ReplicaSpotLowestPrice,
+              !FindInMap [PoolSize, Size, !Ref ReplicaSize],
+              !Ref "AWS::NoValue",
+            ]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref ReplicaLaunchTemplate
+            Version: !Sub ${ReplicaLaunchTemplate.LatestVersionNumber}
+          Overrides: !FindInMap [InstanceSizes, Replica, !Ref ReplicaSize]
+      MinSize: !Ref ReplicaTargetCapacity
+      MaxSize: !Ref ReplicaMaxCapacity
+      HealthCheckType: EC2
+      TargetGroupARNs:
+        !If [
+          NoTG,
+          !Ref "AWS::NoValue",
+          !Split [
+            ",",
+            !If [
+              HasATG,
+              !Ref AlternateTargetGroup,
+              { "Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList" },
+            ],
+          ],
+        ]
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupInServiceInstances
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Replica
+          PropagateAtLaunch: "true"
+
+  ReplicaLogMetricsFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "A lambda function to process Geth logs into metrics"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Sub ${KafkaTopic}
+      Handler: "logMonitor.replicaHandler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+  ReplicaLogMetricsSubscription:
+    Type: AWS::Logs::SubscriptionFilter
+    Properties:
+      DestinationArn: !Sub ${ReplicaLogMetricsFunction.Arn}
+      FilterPattern:
+        '{$.systemdUnit = "geth.service" || $.systemdUnit="proxy.service" ||
+        $.systemdUnit="geth-replica.service"}'
+      LogGroupName: !Ref ReplicaLG
+  ReplicaLogMetricFunctionInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${ReplicaLogMetricsFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: !Sub logs.${AWS::Region}.amazonaws.com
+      SourceAccount: !Ref "AWS::AccountId"
+      SourceArn: !Sub ${ReplicaLG.Arn}
+
+  SnapshotterLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          s_scripting:
+            - validate_block_catchup
+        validate_block_catchup:
+          files:
+            /tmp/validate_block_catchup.sh:
+              content:
+                "Fn::Sub":
+                  - |
+                    #!/bin/bash -xe
+
+                    set -e
+                    set -x
+
+                    # make sure that geth is able to start as a full node and catch up with peers
+                    sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 25 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                    pid=$!
+                    test_pass=0
+                    while [ $test_pass -le 1 ]
+                    do
+                      if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                      then
+                        test_pass=$(( $test_pass + 1 ))
+                      else
+                        test_pass=0
+                      fi
+                      sleep 10
+                    done
+                    START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                    END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                    while [[ "$((END_BLOCK - START_BLOCK))" -le "10" ]]; do
+                      END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                      sleep 10
+                    done
+
+                    kill -HUP $pid
+                  - ClusterId:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                    FreezerFlags:
+                      !If [
+                        EnabledFreezerBucket,
+                        {
+                          "Fn::Sub":
+                            [
+                              "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                              {
+                                Bucket:
+                                  !If [
+                                    HasFreezerBucket,
+                                    !Ref FreezerBucket,
+                                    {
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
+                                    },
+                                  ],
+                              },
+                            ],
+                        },
+                        "",
+                      ]
+              mode: "000700"
+              owner: root
+              group: root
+
+    Properties:
+      LaunchTemplateData:
+        ImageId:
+          !If [
+            HasReplicaImageAMI,
+            !Ref ReplicaImageAMI,
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+          ]
+        InstanceType: m5a.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Snapshotter"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Snapshotter"
+        SecurityGroupIds:
+          - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+        IamInstanceProfile:
+          Name: !Ref SnapshotterNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref "AWS::NoValue"]
+        # CreditSpecification:
+        #   CpuCredits: standard
+        InstanceInitiatedShutdownBehavior: terminate
+        BlockDeviceMappings:
+          - DeviceName: "/dev/xvda"
+            Ebs:
+              VolumeSize: 8
+              VolumeType: gp2
+          - DeviceName: "/dev/sdf"
+            Ebs:
+              VolumeSize: !Ref DiskSize
+              VolumeType: io1
+              Iops: !GetAtt VolumeIOPS.Value
+              # VolumeType: gp3
+              # Iops: 4000
+              # Throughput: 1000
+              SnapshotId: !Ref SnapshotId
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                if [ "$(arch)" == "x86_64" ]
+                then
+                  ARCH="amd64"
+                elif [ "$(arch)" == "aarch64" ]
+                then
+                  ARCH="arm64"
+                fi
+                sleep 21600 && if [ "${S3BackupLogsBucket}" != "" ] ; then cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true; fi && poweroff &
+
+                totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+                export allocatesafe=$((totalm * 75 / 100))
+
+                sysctl -p || true
+                GETH_BIN="geth-linux-$ARCH"
+                aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+                chmod +x /usr/bin/geth
+                mkdir -p /var/lib/ethereum
+                mount -o barrier=0,data=writeback /dev/nvme1n1 /var/lib/ethereum
+                resize2fs /dev/nvme1n1
+                useradd -r geth
+                chown -R geth /var/lib/ethereum
+
+                yum install -y jq
+
+                export AWS_DEFAULT_REGION=${AWS::Region}
+                export AWS_REGION=${AWS::Region}
+                printf "ReplicaClusterVersion=${ReplicaClusterVersion}\nKafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+
+                if [ -f /usr/bin/replica-snapshot-hook ]
+                then
+                  /usr/bin/replica-snapshot-hook
+                fi
+
+                sysctl -w fs.file-max=12000500
+                sysctl -w fs.nr_open=20000500
+                ulimit -n 20000000
+
+                SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
+                SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+                KAFKA_ESCAPED_URL="$(printf "${KafkaBrokerURL}"| sed 's^&^\\&^g')"
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource SnapshotterLaunchTemplate --configsets s_scripting --region ${AWS::Region} --role ${SnapshotterNodeRole}
+
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # pid=$!
+                # test_pass=0
+                # while [ $test_pass -le 1 ]
+                # do
+                #   if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                #   then
+                #     test_pass=$(( $test_pass + 1 ))
+                #   else
+                #     test_pass=0
+                #   fi
+                #   sleep 30
+                # done
+                # START_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                # sudo pkill -f geth
+                # wait $pid
+                # sleep 10
+
+
+                # Update from kafka
+
+                sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$KAFKA_ESCAPED_URL""$SEP""avoid_leader=1 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+                if ! sudo -Eu geth /usr/bin/geth verifystatetrie ${FreezerFlags} --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while taking snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+                # # Check and see if all blocks that were pulled down are actually there and not returning null.
+                # sudo -Eu geth /usr/bin/geth ${MasterExtraFlags} --cache=$allocatesafe --light.maxpeers 0 --maxpeers 0 --rpc --rpcaddr 0.0.0.0 --rpcport 8545 --datadir=/var/lib/ethereum ${FreezerFlags} &
+                # pid=$!
+                # test_pass=0
+                # while [ $test_pass -le 1 ]
+                # do
+                #   if curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545
+                #   then
+                #     test_pass=$(( $test_pass + 1 ))
+                #   else
+                #     test_pass=0
+                #   fi
+                #   sleep 30
+                # done
+                # END_BLOCK=$(curl -X POST --insecure -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":64}' localhost:8545 | jq -r '.result')
+                # for (( block=START_BLOCK; block<=END_BLOCK; block++)); do
+                #   res=$(curl -s -X POST --compressed --insecure --compressed -H "Content-Type: application/json" --data '{"jsonrpc":"2.0","method":"eth_getBlockByNumber","params":["'$(printf "%#x" $block)'", false],"id":1}' localhost:8545)
+                #   if [ "$(echo $res | jq '.result')" = "null" ]
+                #   then
+                #     if [ "${AggregatedNotifications}" != "" ]
+                #     then
+                #       aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Failed" --message="The snapshotting process for ${KafkaTopic} could not validate all blocks from $START_BLOCK to $END_BLOCK, and failed on $block with $res"
+                #     fi
+                #     if [ "${AlarmSNSTopic}" != "" ]
+                #     then
+                #       aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Failed" --message="The snapshotting process for ${KafkaTopic} could not validate all blocks from $START_BLOCK to $END_BLOCK, and failed on $block with $res"
+                #     fi
+                #     if [ "${S3BackupLogsBucket}" != "" ]
+                #     then
+                #       cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                #     fi
+                #     poweroff
+                #   fi
+                # done
+                #
+                # sudo pkill -f geth
+                # wait $pid
+
+                # If this process doesn't commplete in 6 hours, something has gone
+                # wrong and the next snapshotter is in progress, so shutdown
+                sleep 21600 && poweroff &
+
+                VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdf") | .VolumeId' -cr)
+
+                if [ "$VOLUME_ID" == "" ]
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+                SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+
+                if [ "$SNAPSHOT_ID" == "null" ]; then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+                echo "Waiting for snapshot to complete"
+                while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
+                do
+                    sleep 10
+                done
+
+
+                # After the snapshot completes, sync from the network. This is an extra integrity
+                # check on the snapshot, as it requires it to be able to validate blocks.
+                # We don't want this to end up in our final snapshot, but if we can't sync from
+                # the network we don't want to present this snapshot to the cluster.
+                if ! /tmp/validate_block_catchup.sh
+                then
+                  if [ "${AggregatedNotifications}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not sync. Not updating CloudFormation"
+                  fi
+                  if [ "${AlarmSNSTopic}" != "" ]
+                  then
+                    aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not sync. Not updating CloudFormation"
+                  fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                  poweroff
+                fi
+
+                # CFN will set any parameters we don't provide back to their default values,
+                # so get all of the parameters, update SnapshotID, and update the stack with
+                # the new parameters.
+                PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+
+                # Resize Disks
+                ORIGINAL_DISK_SIZE=`aws ec2 describe-volumes --volume-ids "$VOLUME_ID" | jq '.Volumes[] | .Size' -cr`
+                NEW_DISK_SIZE=$((ORIGINAL_DISK_SIZE*115/100))
+
+                ## manually grepping for sdf (mount direcotry above) because we don't really need to worry about the others.
+                df -H | grep -vE '^Filesystem|tmpfs|cdrom' | grep $(readlink -f /dev/sdf) | awk '{ print $5 " " $1 }' | while read output;
+                do
+                  echo $output
+                  usep=$(echo $output | awk '{ print $1}' | cut -d'%' -f1  )
+                  partition=$(echo $output | awk '{ print $2 }' )
+                  if [ $usep -ge 90 ]; then
+                    if [ "${AggregatedNotifications}" != "" ]
+                    then
+                      aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      if [ "${AlarmSNSTopic}" != "" ]
+                      then
+                        aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Upsizing Snapshot Size" --message="The snapshot for ${AWS::StackName} has reached $usep%. Resizing to $NEW_DISK_SIZE GB."
+                      fi
+                      PARAMETERS_RESIZE=$(echo "$PARAMETERS" | jq 'map(if .ParameterKey == "DiskSize" then .ParameterValue="'$NEW_DISK_SIZE'" else . end)' -c)
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS_RESIZE"
+                    fi
+                    else
+                      aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+                  fi
+                done
+
+
+                # IF Day of week is Sunday, compact DB and re-update everything, after taking a new snapshot.
+                if [ $(date +%u) = 7 ]; then
+                  geth compactdb --datadir=/var/lib/ethereum ${FreezerFlags}
+                  NEW_SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+                  echo "Waiting for snapshot to complete"
+                  while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$NEW_SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
+                  do
+                      sleep 10
+                  done
+
+                  # CFN will set any parameters we don't provide back to their default values,
+                  # so get all of the parameters, update SnapshotID, and update the stack with
+                  # the new parameters.
+                  PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$NEW_SNAPSHOT_ID'" else . end)' -c)
+                  aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+
+                  #DELETE OLD SNAPSHOT ONCE EVERYTHING UPDATED
+                  aws ec2 delete-snapshot --snapshot-id $SNAPSHOT_ID
+                fi
+                  if [ "${S3BackupLogsBucket}" != "" ]
+                  then
+                    cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/success-$(date '+%Y%m%d-%H%M%S').log || true
+                  fi
+                poweroff
+              - SnapshotterNodeRole: !Ref SnapshotterNodeRole
+                ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                FreezerFlags:
+                  !If [
+                    EnabledFreezerBucket,
+                    {
+                      "Fn::Sub":
+                        [
+                          "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                          {
+                            Bucket:
+                              !If [
+                                HasFreezerBucket,
+                                !Ref FreezerBucket,
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                              ],
+                          },
+                        ],
+                    },
+                    "",
+                  ]
+  # PrunerLaunchTemplate:
+  #   Type: AWS::EC2::LaunchTemplate
+  #   Properties:
+  #     LaunchTemplateData:
+  #       ImageId: !If [HasReplicaImageAMI, !Ref ReplicaImageAMI, !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]]
+  #       InstanceType: i3en.xlarge
+  #       TagSpecifications:
+  #         - ResourceType: instance
+  #           Tags:
+  #             - Key: Name
+  #               Value: !Sub "${KafkaTopic}-Pruner"
+  #         - ResourceType: volume
+  #           Tags:
+  #             - Key: Name
+  #               Value: !Sub "${KafkaTopic}-Pruner"
+  #       SecurityGroupIds:
+  #         - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+  #       IamInstanceProfile:
+  #         Name: !Ref PrunerNodeInstanceProfile
+  #       KeyName: !If [HasKeyName, !Ref KeyName, !Ref 'AWS::NoValue']
+  #       InstanceInitiatedShutdownBehavior: terminate
+  #       BlockDeviceMappings:
+  #       - DeviceName: "/dev/xvda"
+  #         Ebs:
+  #           VolumeSize: 8
+  #           VolumeType: gp2
+  #       - DeviceName: "/dev/sdf"
+  #         Ebs:
+  #           VolumeSize: !Ref DiskSize
+  #           VolumeType: io1
+  #           Iops: !GetAtt VolumeIOPS.Value
+  # #           VolumeType: gp3
+  # #           Iops:  4000
+  # #           Throughput: 1000
+  #           SnapshotId: !Ref SnapshotId
+  #       - DeviceName: "/dev/sdg"
+  #         Ebs:
+  #           VolumeSize: !Ref DiskSize
+  #           VolumeType: gp2
+  #       UserData:
+  #         "Fn::Base64":
+  #           "Fn::Sub":
+  #             - |
+  #               #!/bin/bash -xe
+  #               if [ "$(arch)" == "x86_64" ]
+  #               then
+  #                 ARCH="amd64"
+  #               elif [ "$(arch)" == "aarch64" ]
+  #               then
+  #                 ARCH="arm64"
+  #               fi
+  #               totalm=$(free -m | awk '/^Mem:/{print $2}') ; echo $totalm
+  #               allocatesafe=$((totalm * 75 / 100))
+  #               GETH_BIN="geth-linux-$ARCH"
+  #               aws s3 cp s3://${S3GethBucketName}/${ECGethVersion}/$GETH_BIN /usr/bin/geth
+  #               chmod +x /usr/bin/geth
+  #               mkdir -p /var/lib/ethereum
+  #               mount -o barrier=0,data=writeback /dev/sdf /var/lib/ethereum
+  #               mkdir -p /tmp/oldfast
+  #               mkdir -p /tmp/new
+  #               mkfs.ext4 /dev/sdg
+  #               mkfs.ext4 /dev/nvme2n1
+  #               mount -o barrier=0,data=writeback /dev/sdg /tmp/new
+  #               mount -o barrier=0,data=writeback /dev/nvme3n1 /tmp/oldfast
+  #
+  #
+  #               resize2fs /dev/sdf
+  #               useradd -r geth
+  #               chown -R geth /var/lib/ethereum
+  #
+  #               yum install -y jq
+  #
+  #               export AWS_DEFAULT_REGION=${AWS::Region}
+  #               printf "KafkaHostname=${KafkaBrokerURL}\nKafkaTopic=${KafkaTopic}\nNetworkId=${NetworkId}\ninfraName=${InfrastructureStack}\nAWS_REGION=${AWS::Region}\n" > /etc/systemd/system/ethcattle-vars
+  #
+  #               if [ -f /usr/bin/replica-snapshot-hook ]
+  #               then
+  #                 /usr/bin/replica-snapshot-hook
+  #               fi
+  #
+  #               sysctl -w fs.file-max=12000500
+  #               sysctl -w fs.nr_open=20000500
+  #               ulimit -n 20000000
+  #
+  #               SEP=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "&" || echo "?")
+  #               SEP_ESCAPED=$(echo "${KafkaBrokerURL}" | grep -q "?" && echo "\\&" || echo "?")
+  #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/var/lib/ethereum --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/var/lib/ethereum ${SnapshotValidationThreshold}
+  #               then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #
+  #               cp -r /var/lib/ethereum/* /tmp/oldfast
+  #               mkdir -p /tmp/new/geth
+  #               if ! sudo /usr/bin/geth migratestate /tmp/oldfast/geth/chaindata/ancient /tmp/oldfast/geth/chaindata /tmp/new/geth/chaindata ${KafkaTopic}
+  #               then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - State Migration Failed" --message="State migration failed for cluster ${KafkaTopic}"
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - State Migration Failed" --message="State migration failed for cluster ${KafkaTopic}"
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #
+  #               cp -r /tmp/oldfast/geth/ethash /tmp/new/geth/ethash
+  #               cp -r /tmp/oldfast/geth/nodes /tmp/new/geth/nodes
+  #               cp -r /tmp/oldfast/geth/transactions.rlp /tmp/new/geth/transactions.rlp
+  #               cp -r /tmp/oldfast/geth/chaindata/ancient /tmp/new/geth/chaindata/ancient
+  #               sudo chown geth.geth /tmp/new -R
+  #
+  #               # Verify the state trie immediately following the state trie sync
+  #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
+  #               then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This is probably unrecoverable, and you will need to deploy a new cluster from your last good snapshot (probably '${SnapshotId}')"
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #
+  #               # Sync from Kafka, then verify again. This should catch any reorgs from the block we pruned
+  #               sudo -Eu geth /usr/bin/geth replica --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --kafka.broker=$(printf "${KafkaBrokerURL}")""$SEP""fetch.default=8388608\&max.waittime=25 --datadir=/tmp/new --kafka.topic=${KafkaTopic} --replica.syncshutdown
+  #               if ! sudo -Eu geth /usr/bin/geth verifystatetrie --datadir=/tmp/new ${SnapshotValidationThreshold}
+  #               then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This probably means that the block we pruned got reorged out, and pruning will need to be repated."
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Bad State Trie" --message="State trie verification failed while pruning snapshot for cluster '${KafkaTopic}'. No snapshot will be taken. This probably means that the block we pruned got reorged out, and pruning will need to be repated."
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #
+  #               VOLUME_ID=$(aws ec2 describe-volumes --filters Name=attachment.instance-id,Values="$(curl http://169.254.169.254/latest/meta-data/instance-id)" | jq '.Volumes[] | select(. | .Attachments[0].Device == "/dev/sdg") | .VolumeId' -cr)
+  #
+  #               if [ "$VOLUME_ID" == "" ]
+  #               then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Volume Identification Failed" --message="The snapshotting process for ${KafkaTopic} failed to identify the attached volume. Could not take a snapshot."
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #
+  #               SNAPSHOT_ID=`aws ec2 create-snapshot --volume-id $VOLUME_ID --tag-specification="ResourceType=snapshot,Tags=[{Key=cluster,Value=${KafkaTopic}},{Key=Name,Value=${KafkaTopic}-chaindata-$(date -Isecond -u)}]" | jq '.SnapshotId' -cr`
+  #
+  #               if [ "$SNAPSHOT_ID" == "null" ]; then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} failed to take a snapshot."
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #               echo "Waiting for snapshot to complete"
+  #               while [ `aws ec2 describe-snapshots --filters=Name=snapshot-id,Values=$SNAPSHOT_ID | jq '.Snapshots[0].State' -cr` != "completed" ];
+  #               do
+  #                   sleep 10
+  #               done
+  #
+  #               # For one last good measure, start up a node and sync it up to the latest block from the network.
+  #               # If it can do this, the state trie is in good shape. We do this after taking the snapshot but
+  #               # before updating cloudformation so that this won't change the content of the snapshot, but if it
+  #               # doesn't work we don't impose a bad snapshot on our cluster.
+  #               if ! sudo -Eu geth /usr/bin/geth --cache=$allocatesafe ${ReplicaExtraFlags} ${FreezerFlags} --datadir=/tmp/new --exitwhensynced
+  #               then
+  #                 if [ "${AggregatedNotifications}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AggregatedNotifications} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not start. Not updating CloudFormation"
+  #                 fi
+  #                 if [ "${AlarmSNSTopic}" != "" ]
+  #                 then
+  #                   aws sns publish --topic-arn=${AlarmSNSTopic} --subject="${AWS::StackName} - Snapshotting Volume Failed" --message="The snapshotting process for ${KafkaTopic} took a snapshot, but Geth could not start. Not updating CloudFormation"
+  #                 fi
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #                 poweroff
+  #               fi
+  #
+  #               # CFN will set any parameters we don't provide back to their default values,
+  #               # so get all of the parameters, update SnapshotID, and update the stack with
+  #               # the new parameters.
+  #               PARAMETERS=$(aws cloudformation describe-stacks --stack-name ${AWS::StackName} | jq '.Stacks[0].Parameters | map(if .ParameterKey == "SnapshotId" then .ParameterValue="'$SNAPSHOT_ID'" else . end)' -c)
+  #               aws cloudformation update-stack --stack-name ${AWS::StackName} --use-previous-template --capabilities CAPABILITY_IAM --parameters="$PARAMETERS"
+  #
+  # if [ "${S3BackupLogsBucket}" != "" ]
+  # then
+  #   cat /var/log/cloud-init-output.log | aws s3 cp - s3://${S3BackupLogsBucket}/ethercattle/${NetworkId}/failure-$(date '+%Y%m%d-%H%M%S').log || true
+  # fi
+  #               poweroff
+  #             - KafkaHostname:
+  #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-KafkaBrokerURL"
+  #               ClusterId:
+  #                 "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+  #               FreezerFlags: !If [ EnabledFreezerBucket, {"Fn::Sub": ["--datadir.ancient=s3://${Bucket}/${NetworkId}", {Bucket: !If [ HasFreezerBucket, !Ref FreezerBucket, {"Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"} ]} ]}, ""]
+  FallBackLG:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+      LogGroupName:
+        "Fn::Sub":
+          - "/${ClusterId}/${AWS::StackName}/fallback"
+          - ClusterId:
+              "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+
+  FallbackLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateData:
+        ImageId:
+          !If [
+            HasReplicaImageAMI,
+            !Ref ReplicaImageAMI,
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+          ]
+        InstanceType: m5ad.large
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Fallback"
+          - ResourceType: volume
+            Tags:
+              - Key: Name
+                Value: !Sub "${KafkaTopic}-Fallback"
+        SecurityGroupIds:
+          - !Sub ${ReplicaNodeSecurityGroup.GroupId}
+          - !Sub ${MasterNodeSecurityGroup.GroupId}
+          - !If [HasExtraSecurityGroup, !Ref ReplicaExtraSecurityGroup, !Ref "AWS::NoValue"]
+        IamInstanceProfile:
+          Name: !Ref ReplicaNodeInstanceProfile
+        KeyName: !If [HasKeyName, !Ref KeyName, !Ref "AWS::NoValue"]
+        # CreditSpecification: !If [SmallReplica, {CpuCredits: standard}, !Ref 'AWS::NoValue']
+        BlockDeviceMappings:
+          - DeviceName: "/dev/xvda"
+            Ebs:
+              VolumeSize: 8
+              VolumeType: gp2
+          - DeviceName: "/dev/sdf"
+            Ebs:
+              VolumeSize: !If [ReplicaHDD, !GetAtt HDDSize.Value, !Ref DiskSize]
+              VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "io1"]
+              Iops: !If [ReplicaHDD, !Ref "AWS::NoValue", !GetAtt VolumeIOPS.Value]
+              # VolumeType: !If [ReplicaHDD, !Ref ReplicaDiskType, "gp3"]
+              # Iops: !If [ReplicaHDD, !Ref 'AWS::NoValue', 4000 ]
+              # Throughput: 1000
+              SnapshotId: !Ref SnapshotId
+          - !If [
+              SmallReplica,
+              {
+                DeviceName: "/dev/sdg",
+                Ebs: { VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125 },
+              },
+              {
+                DeviceName: "/dev/sdg",
+                Ebs: { VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125 },
+              },
+            ]
+        UserData:
+          "Fn::Base64":
+            "Fn::Sub":
+              - |
+                #!/bin/bash -xe
+                /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource MasterLaunchTemplate --configsets setup --region ${AWS::Region}
+                /root/service-configs.sh
+                /root/configure-server.sh
+                /root/start-fallback.sh
+                /root/loadtest-disk.sh
+              - ClusterId:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-ClusterId"
+                ReplicaHTTPFlag: !If [HasReplicaHTTP, "--rpc --rpcaddr 0.0.0.0 --rpcport 8545", ""]
+                ReplicaGraphQLFlag:
+                  # Wow that's a lot of escaping!
+                  !If [
+                    HasReplicaGraphQL,
+                    "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts
+                    \\\\\\'*\\\\\\'",
+                    "",
+                  ]
+                ReplicaWebsocketsFlag:
+                  !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
+                BaseInfrastructure:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-BaseInfrastructure"
+                FreezerFlags:
+                  !If [
+                    EnabledFreezerBucket,
+                    {
+                      "Fn::Sub":
+                        [
+                          "--datadir.ancient=s3://${Bucket}/${NetworkId}",
+                          {
+                            Bucket:
+                              !If [
+                                HasFreezerBucket,
+                                !Ref FreezerBucket,
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                              ],
+                          },
+                        ],
+                    },
+                    "",
+                  ]
+
+  FallbackAutoScalingPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      # AdjustmentType: String
+      AutoScalingGroupName: !Ref FallbackAutoScalingGroup
+      # Cooldown: 900
+      EstimatedInstanceWarmup: 600
+      # MetricAggregationType: String
+      # MinAdjustmentMagnitude: Integer
+      PolicyType: TargetTrackingScaling
+      # ScalingAdjustment: Integer
+      # StepAdjustments:
+      #   - StepAdjustment
+      TargetTrackingConfiguration:
+        PredefinedMetricSpecification:
+          PredefinedMetricType: ASGAverageCPUUtilization
+        TargetValue: !Ref ReplicaCPUScalingTargetValue
+
+  FallbackAutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+        - "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandPercentageAboveBaseCapacity: !Ref FallbackOnDemandPercentage
+          SpotAllocationStrategy: !Ref ReplicaSpotAllocationStrategy
+          SpotInstancePools:
+            !If [
+              ReplicaSpotLowestPrice,
+              !FindInMap [PoolSize, Size, !Ref ReplicaSize],
+              !Ref "AWS::NoValue",
+            ]
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref FallbackLaunchTemplate
+            Version: !Sub ${FallbackLaunchTemplate.LatestVersionNumber}
+          Overrides: !FindInMap [InstanceSizes, Fallback, !Ref ReplicaSize]
+      MinSize: !Ref FallbackTargetCapacity
+      MaxSize: !Ref FallbackMaxCapacity
+      HealthCheckType: EC2
+      TargetGroupARNs:
+        !If [
+          NoTG,
+          !Ref "AWS::NoValue",
+          !Split [
+            ",",
+            !If [
+              HasATG,
+              !Ref AlternateTargetGroup,
+              { "Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList" },
+            ],
+          ],
+        ]
+      MetricsCollection:
+        - Granularity: 1Minute
+          Metrics:
+            - GroupInServiceInstances
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-Fallback
+          PropagateAtLaunch: "true"
+
+  SnapshotterNodeRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+                - autoscaling.amazonaws.com
+        Version: "2012-10-17"
+  SnapshotterNodePolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref SnapshotterNodeRole
+      PolicyName: !Sub "SnapshotterNode${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - s3:GetObject
+            Resource: !Sub arn:aws:s3:::${S3GethBucketName}/*
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+              - s3:PutObject
+            Resource: !Sub arn:aws:s3:::${S3BackupLogsBucket}/*
+            Effect: Allow
+          - Action:
+              - lambda:GetFunctionConfiguration
+              - lambda:InvokeAsync
+              - lambda:InvokeFunction
+              - lambda:GetFunction
+              - iam:ListRoles
+              - iam:ListRolePolicies
+              - iam:GetRole
+              - iam:PassRole
+              - iam:GetRolePolicy
+              - iam:ListAttachedRolePolicies
+            Resource:
+              - "*"
+            Effect: Allow
+          - Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+              - s3:GetBucketPolicy
+              - s3:GetObjectTagging
+              - s3:GetBucketLocation
+            Resource:
+              - {
+                  "Fn::Sub":
+                    [
+                      "arn:aws:s3:::${Bucket}/*",
+                      {
+                        "Bucket":
+                          !If [
+                            HasFreezerBucket,
+                            !Ref FreezerBucket,
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                          ],
+                      },
+                    ],
+                }
+              - {
+                  "Fn::Sub":
+                    [
+                      "arn:aws:s3:::${Bucket}",
+                      {
+                        "Bucket":
+                          !If [
+                            HasFreezerBucket,
+                            !Ref FreezerBucket,
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
+                          ],
+                      },
+                    ],
+                }
+            Effect: Allow
+          - Action:
+              - cloudformation:UpdateStack
+            Resource: !Sub "arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/${AWS::StackName}/*"
+            Effect: Allow
+          - Action:
+              - iam:GetInstanceProfile
+            Resource:
+              - !Sub ${MasterNodeInstanceProfile.Arn}
+              - !Sub ${ReplicaNodeInstanceProfile.Arn}
+              - !Sub ${SnapshotterNodeInstanceProfile.Arn}
+            Effect: Allow
+          - Action:
+              - lambda:UpdateFunctionConfiguration
+              - lambda:GetFunctionConfiguration
+            Resource:
+              - !Sub ${SnapshotterLambdaFunction.Arn}
+              - !Sub ${SnapshotGCLambdaFunction.Arn}
+              - !Sub ${DiskSizeLambdaFunction.Arn}
+            Effect: Allow
+          - Action:
+              - iam:PassRole
+              - iam:GetRole
+              - iam:PutRolePolicy
+            Resource:
+              - !Sub "${ReplicaNodeRole.Arn}"
+              - !Sub "${MasterNodeRole.Arn}"
+              - !Sub "${SnapshotterLambdaRole.Arn}"
+              - !Sub "${SnapshotterNodeRole.Arn}"
+              - !Sub "${SnapshotGCLambdaRole.Arn}"
+            Effect: Allow
+          - Action:
+              - sns:Publish
+            Resource:
+              - !Ref AggregatedNotifications
+              - !If [HasSNSTopic, !Ref AlarmSNSTopic, !Ref "AWS::NoValue"]
+            Effect: Allow
+          - Action:
+              - autoscaling:EnableMetricsCollection
+              - autoscaling:DisableMetricsCollection
+              - autoscaling:UpdateAutoScalingGroup
+            Resource:
+              - "*"
+            Condition:
+              StringEquals:
+                "autoscaling:ResourceTag/aws:cloudformation:stack-id": !Sub "${AWS::StackId}"
+            Effect: Allow
+          - Action:
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackResource
+              - ec2:DescribeLaunchTemplates
+              - ec2:DescribeSnapshotAttribute
+              - ec2:CreateTags
+              - ec2:DescribeLaunchTemplateVersions
+              - ec2:RunInstances
+              - ec2:DescribeSnapshots
+              - ec2:CreateLaunchTemplateVersion
+              - ec2:DescribeVolumeStatus
+              - autoscaling:DescribeAutoScalingGroups
+              - autoscaling:DescribeScalingActivities
+              - ec2:DescribeVolumes
+              - ec2:CreateSnapshot
+              - ec2:DeleteSnapshot
+              - events:DescribeRule
+              - ec2:DescribeKeyPairs
+            Resource: "*"
+            Effect: Allow
+  SnapshotterNodeInstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      Path: /
+      Roles:
+        - !Ref SnapshotterNodeRole
+    DependsOn: SnapshotterNodeRole
+  SnapshotterLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: "2012-10-17"
+  SnapshotterLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref SnapshotterLambdaRole
+      PolicyName: !Sub "SnapshotterLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Action:
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+              - logs:PutLogEvents
+              - sns:Publish
+            Effect: Allow
+            Resource: "*"
+          - Effect: Allow
+            Action:
+              - iam:PassRole
+            Resource: !Sub "${SnapshotterNodeRole.Arn}"
+          - Effect: Allow
+            Action:
+              - ec2:CreateTags
+              - ec2:RunInstances
+            Resource:
+              - Fn::Sub:
+                  - "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:subnet/${PublicA}"
+                  - PublicA:
+                      "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:key-pair/${KeyName}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:instance/*"
+              - !Sub "arn:aws:ec2:*::snapshot/${SnapshotId}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:volume/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${ReplicaNodeSecurityGroup.GroupId}"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:network-interface/*"
+              - !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:launch-template/${SnapshotterLaunchTemplate}"
+              - "arn:aws:ec2:*::image/*"
+
+  SnapshotterLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Launch instances to snapshot chaindata"
+      Environment:
+        Variables:
+          LAUNCH_TEMPLATE_ID: !Ref SnapshotterLaunchTemplate
+          LAUNCH_TEMPLATE_VERSION: !Sub "${SnapshotterLaunchTemplate.LatestVersionNumber}"
+          SUBNET_ID:
+            "Fn::Sub":
+              - "${PublicA},${PublicB},${PublicC}"
+              - PublicA:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicA"
+                PublicB:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicB"
+                PublicC:
+                  "Fn::ImportValue": !Sub "${InfrastructureStack}-PublicC"
+          VOLUME_SIZE: !Ref DiskSize
+      Handler: "getSnapshot.handler"
+      Role: !Sub ${SnapshotterLambdaRole.Arn}
+      Runtime: python3.7
+      Timeout: 30
+
+  SnapshotSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Take a daily snapshot for the ${KafkaTopic} cluster"
+      ScheduleExpression: !Ref SnapshotScheduleExpression
+      Targets:
+        - Arn: !Sub ${SnapshotterLambdaFunction.Arn}
+          Id: !Sub "snapshot-${KafkaTopic}"
+
+  SnapshotterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${SnapshotterLambdaFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${SnapshotSchedulerRule.Arn}
+
+  DiskSizeLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: "2012-10-17"
+  DiskSizeLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref DiskSizeLambdaRole
+      PolicyName: !Sub "DiskSizeLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ec2:DescribeVolumes
+              - ec2:ModifyVolume
+            Resource: "*"
+  DiskSizeLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Align master volume sizes with CloudFormation parameters"
+      Environment:
+        Variables:
+          VOLUME_SIZE: !Ref DiskSize
+          KAFKA_TOPIC: !Ref KafkaTopic
+      Handler: "masterVolumeManager.sizeHandler"
+      Role: !Sub ${DiskSizeLambdaRole.Arn}
+      Runtime: python3.7
+  DiskManagerSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: Disk Size manager
+      ScheduleExpression: "rate(15 minutes)"
+      Targets:
+        - Arn: !Sub ${DiskSizeLambdaFunction.Arn}
+          Id: !Sub "disk-size-${KafkaTopic}"
+
+  DiskManagerInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${DiskSizeLambdaFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${DiskManagerSchedulerRule.Arn}
+
+  SnapshotGCLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: "2012-10-17"
+  SnapshotGCLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref SnapshotGCLambdaRole
+      PolicyName: !Sub "SnapshotGCLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - sns:Publish
+              - ec2:DescribeSnapshots
+              - ec2:DeleteSnapshot
+            Resource: "*"
+
+  SnapshotGCLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Cleanup old chaindata snapshots"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Ref KafkaTopic
+          SNAPSHOT_ID: !Ref SnapshotId
+          SNS_TOPICS: !Sub "${AggregatedNotifications};${AlarmSNSTopic}"
+      Handler: "gcSnapshot.handler"
+      Role: !Sub ${SnapshotGCLambdaRole.Arn}
+      Runtime: python3.7
+
+  SnapshotGCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Cleanup old snapshots for the the ${KafkaTopic} cluster"
+      ScheduleExpression: "rate(1 hour)"
+      Targets:
+        - Arn: !Sub ${SnapshotGCLambdaFunction.Arn}
+          Id: !Sub "gc-${KafkaTopic}"
+
+  SnapshotGCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${SnapshotGCLambdaFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${SnapshotGCSchedulerRule.Arn}
+
+  RemoteMetricsLambdaFunction:
+    Condition: HasRemoteRPCURL
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-22.zip
+      Description: "Collect metrics for remote RPC URLs"
+      Environment:
+        Variables:
+          CLUSTER_ID: !Ref KafkaTopic
+          RPC_URL: !Ref RemoteRPCURL
+      Handler: "remote_metrics.handler"
+      Role: !Sub ${LogMetricsRole.Arn}
+      Runtime: python3.7
+
+  RemoteMetricsSchedulerRule:
+    Condition: HasRemoteRPCURL
+    Type: AWS::Events::Rule
+    Properties:
+      Description: !Sub "Remote metrics"
+      ScheduleExpression: "rate(1 minute)"
+      Targets:
+        - Arn: !Sub ${RemoteMetricsLambdaFunction.Arn}
+          Id: !Sub "remote-metrics-${KafkaTopic}"
+
+  RemoteMetricsInvokePermission:
+    Condition: HasRemoteRPCURL
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${RemoteMetricsLambdaFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${RemoteMetricsSchedulerRule.Arn}
+
+  VolumeGCLambdaRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action:
+              - sts:AssumeRole
+            Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+        Version: "2012-10-17"
+  VolumeGCLambdaPolicy:
+    Type: "AWS::IAM::Policy"
+    Properties:
+      Roles:
+        - !Ref VolumeGCLambdaRole
+      PolicyName: !Sub "VolumeGCLambdaPolicy${AWS::StackName}"
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - tag:GetResources
+              - tag:TagResources
+              - ec2:CreateTags
+              - ec2:DescribeInstances
+              - ec2:DeleteVolume
+              - ec2:DetachVolume
+              - ec2:DescribeVolumes
+              - logs:PutLogEvents
+              - logs:DescribeLogStreams
+              - logs:DescribeLogGroups
+              - logs:CreateLogStream
+              - logs:CreateLogGroup
+            Resource: "*"
+
+  VolumeGCLambdaFunction:
+    Type: "AWS::Lambda::Function"
+    Properties:
+      Code:
+        S3Bucket: !Ref S3GethBucketName
+        S3Key: lambdaPackage-26.zip
+      Description: "Cleanup old chaindata snapshots"
+      Environment:
+        Variables:
+          TAG_NAME: VOLUME_MGMT_GROUP
+          TAG_VALUE: !Sub ${AWS::StackName}
+          VOLUME_NAME: /dev/sdg
+      Handler: "volumeGC.handler"
+      Role: !Sub ${VolumeGCLambdaRole.Arn}
+      Runtime: python3.7
+
+  VolumeGCSchedulerRule:
+    Type: AWS::Events::Rule
+    Properties:
+      EventPattern:
+        source:
+          - "aws.ec2"
+        detail-type:
+          - "EC2 Instance State-change Notification"
+      State: ENABLED
+      Targets:
+        - Arn: !Sub ${VolumeGCLambdaFunction.Arn}
+          Id: !Sub "vgc-${KafkaTopic}"
+
+  VolumeGCInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Sub ${VolumeGCLambdaFunction.Arn}
+      Action: "lambda:InvokeFunction"
+      Principal: events.amazonaws.com
+      SourceArn: !Sub ${VolumeGCSchedulerRule.Arn}
+
+  CloudwatchDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub "${AWS::StackName}-${AWS::Region}"
+      DashboardBody:
+        Fn::Sub:
+          - |
+            {
+              "widgets": [
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 0,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "BlockData", "number", "clusterId", "${KafkaTopic}", { "label": "Master Block Number" } ],
+                              [ "ReplicaData", "num",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Replica Block Number (avg)" } ],
+                              [ "ReplicaData", "num",  "clusterId", "${KafkaTopic}", { "stat": "Minimum", "label": "Replica Block Number (min)" } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Block Number"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 12,
+                      "y": 0,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "BlockData", "age", "clusterId", "${KafkaTopic}" ],
+                              [ "ReplicaData", "age",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Replica Block Age (avg)" } ],
+                              [ "ReplicaData", "age",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "Replica Block Age (max)" } ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Block Age"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 0,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "ReplicaData", "offsetAge", "clusterId", "${KafkaTopic}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Offset Age"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 6,
+                      "y": 6,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${MasterAutoScalingGroup}", "device", "nvme1n1", "fstype", "ext4" ],
+                              [ "CWAgent", "disk_used_percent", "path", "/var/lib/ethereum", "AutoScalingGroupName", "${MasterAutoScalingGroup}", "device", "xvdf", "fstype", "ext4" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Disk Usage"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 6,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${MasterAutoScalingGroup}", { "stat": "Average", "label": "Master" }],
+                              [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${ReplicaAutoScalingGroup}", { "stat": "Average", "label": "Replicas (avg)" } ],
+                              [ "AWS/EC2", "CPUUtilization", "AutoScalingGroupName", "${ReplicaAutoScalingGroup}", { "stat": "Maximum", "label": "Replicas (max)" } ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "CPU Utilization"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 6,
+                      "y": 0,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ { "expression": "m1-m2", "label": "Expression1", "id": "e1" } ],
+                              [ "BlockData", "number", "clusterId", "${KafkaTopic}", { "id": "m1", "visible": false } ],
+                              [ "ReplicaData", "num", "clusterId", "${KafkaTopic}", { "id": "m2", "visible": false } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Block Lag"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 12,
+                      "y": 6,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${MasterAutoScalingGroup}" , { "stat": "Average", "label": "Master" }],
+                              [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${ReplicaAutoScalingGroup}" , { "stat": "Average", "label": "Replicas (avg)" } ],
+                              [ "CWAgent", "mem_used_percent", "AutoScalingGroupName", "${ReplicaAutoScalingGroup}" , { "stat": "Maximum", "label": "Replicas (max)" } ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Memory Utilization"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 18,
+                      "y": 6,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "RequestCountPerTarget", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ],
+                              [ ".", "RequestCount", ".", "${TargetGroup}", ".", "${LoadBalancer}", { "stat": "Sum", "period": 60 } ]
+                          ],
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "region": "${AWS::Region}",
+                          "title": "Requests Per Replica",
+                          "period": 300
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 0,
+                      "y": 12,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "AWS/ApplicationELB", "TargetResponseTime", "TargetGroup", "${TargetGroup}", "LoadBalancer", "${LoadBalancer}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Response Time"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "x": 6,
+                      "y": 12,
+                      "width": 6,
+                      "height": 6,
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "BlockData", "peerCount", "clusterId", "${KafkaTopic}" ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Master Peer Count"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "ReplicaData", "delta",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Replica Delta (avg)" } ],
+                              [ "ReplicaData", "delta",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "Replica Delta (max)" } ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Replication Delta"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "ReplicaData", "concurrency",  "clusterId", "${KafkaTopic}", { "stat": "Average", "label": "Concurrent Requests (avg)" } ],
+                              [ "ReplicaData", "concurrency",  "clusterId", "${KafkaTopic}", { "stat": "Maximum", "label": "Concurrent Requests (max)" } ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Replica Concurrency"
+                      }
+                  },
+                  {
+                      "type": "metric",
+                      "properties": {
+                          "view": "timeSeries",
+                          "stacked": false,
+                          "metrics": [
+                              [ "ReplicaData", "backend_error",  "clusterId", "${KafkaTopic}", { "stat": "Sum", "label": "Backend Errors (avg)" } ]
+                          ],
+                          "region": "${AWS::Region}",
+                          "title": "Backend Errors"
+                      }
+                  }${DashExt}
+              ]
+            }
+          - TargetGroup: { "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBGroupName" }
+            LoadBalancer: { "Fn::ImportValue": !Sub "${InfrastructureStack}-RPCALBName" }
+            DashExt:
+              !If [HasDashboardExtensions, { "Fn::ImportValue": !Ref DashboardExtension }, ""]
