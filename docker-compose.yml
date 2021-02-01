@@ -6,11 +6,11 @@ services:
       context: besu/.
       args:
         BESU_VERSION: ${BESU_VERSION}
-    image: sample-network/besu:${BESU_VERSION}
+    image: cabal-network/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
     entrypoint:
-      /opt/besu/bootnode_start.sh --network=dev --config-file=/config/config.toml --min-gas-price=0
+      /opt/besu/bootnode_start.sh --network=dev --config-file=/config/config.toml --min-gas-price=21000
     volumes:
       - public-keys:${BESU_PUBLIC_KEY_DIRECTORY}
       - ./config/besu/config.toml:/config/config.toml
@@ -19,7 +19,7 @@ services:
       - 30303:30303/udp
 
   minernode:
-    image: sample-network/besu:${BESU_VERSION}
+    image: cabal-network/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
     command:
@@ -36,7 +36,7 @@ services:
       - bootnode
 
   node:
-    image: sample-network/besu:${BESU_VERSION}
+    image: cabal-network/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
     command: ["--config-file=/config/config.toml", "--network=dev"]
@@ -47,7 +47,7 @@ services:
       - bootnode
 
   rpcnode:
-    image: sample-network/besu:${BESU_VERSION}
+    image: cabal-network/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
     command: ["--config-file=/config/config.toml", "--network=dev"]
