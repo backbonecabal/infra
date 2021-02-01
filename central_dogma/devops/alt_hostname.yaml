@@ -1,5 +1,5 @@
 Description:
-  A middleware stack that adds a new hostname with its own target group to an Ether Cattle Load
+  A middleware stack that adds a new hostname with its own target group to the Load
   Balancer.
 
 Parameters:
