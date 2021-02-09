@@ -1,4 +1,4 @@
----
+ ---
 version: "3.4"
 services:
   bootnode:
@@ -6,54 +6,64 @@ services:
       context: besu/.
       args:
         BESU_VERSION: ${BESU_VERSION}
-    image: cabal-network/besu:${BESU_VERSION}
+    image: backbone/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
-    entrypoint:
-      /opt/besu/bootnode_start.sh --network=dev --config-file=/config/config.toml --min-gas-price=21000
+      - LOG4J_CONFIGURATION_FILE=/config/log-config.xml
+    entrypoint: /opt/besu/bootnode_start.sh backbone --config-file=/config/config.toml
     volumes:
       - public-keys:${BESU_PUBLIC_KEY_DIRECTORY}
       - ./config/besu/config.toml:/config/config.toml
+      - ./config/besu/log-config.xml:/config/log-config.xml
+      - ./logs/besu:/var/log/
     ports:
       - 30303:30303/tcp
       - 30303:30303/udp
 
   minernode:
-    image: cabal-network/besu:${BESU_VERSION}
+    image: backbone/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
+      - LOG4J_CONFIGURATION_FILE=/config/log-config.xml
     command:
       [
         "--config-file=/config/config.toml",
-        "--network=dev",
-        "--miner-enabled=true",
+        "--miner-enabled=false",
         "--miner-coinbase=${MINER_COINBASE}",
       ]
     volumes:
       - public-keys:${BESU_PUBLIC_KEY_DIRECTORY}
       - ./config/besu/config.toml:/config/config.toml
+      - ./config/besu/log-config.xml:/config/log-config.xml
+      - ./logs/besu:/var/log/
     depends_on:
       - bootnode
 
   node:
-    image: cabal-network/besu:${BESU_VERSION}
+    image: backbone/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
+      - LOG4J_CONFIGURATION_FILE=/config/log-config.xml
     command: ["--config-file=/config/config.toml", "--network=dev"]
     volumes:
       - public-keys:${BESU_PUBLIC_KEY_DIRECTORY}
       - ./config/besu/config.toml:/config/config.toml
+      - ./config/besu/log-config.xml:/config/log-config.xml
+      - ./logs/besu:/var/log/
     depends_on:
       - bootnode
 
   rpcnode:
-    image: cabal-network/besu:${BESU_VERSION}
+    image: backbone/besu:${BESU_VERSION}
     environment:
       - BESU_PUBLIC_KEY_DIRECTORY=${BESU_PUBLIC_KEY_DIRECTORY}
+      - LOG4J_CONFIGURATION_FILE=/config/log-config.xml
     command: ["--config-file=/config/config.toml", "--network=dev"]
     volumes:
       - public-keys:${BESU_PUBLIC_KEY_DIRECTORY}
       - ./config/besu/config.toml:/config/config.toml
+      - ./config/besu/log-config.xml:/config/log-config.xml
+      - ./logs/besu:/var/log/
     depends_on:
       - bootnode
     ports:
@@ -61,7 +71,7 @@ services:
 
   explorer:
     build: block-explorer-light/.
-    image: "sample-network/block-explorer-light:${BESU_VERSION}"
+    image: "backbone/block-explorer-light:${BESU_VERSION}"
     depends_on:
       - rpcnode
     ports:
@@ -86,6 +96,79 @@ services:
       - grafana:/var/lib/grafana
     ports:
       - 3000:3000/tcp
+
+  redis:
+    image: redis:alpine
+
+  elasticsearch:
+    build: ./elasticsearch
+    environment:
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - "http.host=0.0.0.0"
+      - "transport.host=127.0.0.1"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    cap_add:
+      - IPC_LOCK
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.6.1
+    environment:
+      ELASTICSEARCH_HOSTS: "http://elasticsearch:9200"
+      XPACK_MONITORING_ENABLED: "true"
+      XPACK_MONITORING_COLLECTION_ENABLED: "true"
+      SERVER_NAME: "localhost"
+    depends_on:
+      - elasticsearch
+    links:
+      - elasticsearch
+    ports:
+      - 5601:5601/tcp
+
+  logstash:
+    build: ./logstash
+    environment:
+      - ES_HOST=http://elasticsearch:9200
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+      - elasticsearch
+    links:
+      - redis
+      - elasticsearch
+
+  filebeat:
+    build: ./filebeat
+    environment:
+      - ENV_NAME=dev
+      - IP_ADDRESS=127.0.0.1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    links:
+      - redis
+    volumes:
+      - ./logs/besu/:/var/log/besu/
+
+  metricbeat:
+    build: ./metricbeat
+    environment:
+      - ENV_NAME=dev
+      - IP_ADDRESS=127.0.0.1
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    links:
+      - redis
 
 volumes:
   public-keys:
