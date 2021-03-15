@@ -490,7 +490,7 @@ Conditions:
       !Equals [!Ref DiskSize, "300"],
       !Equals [!Ref DiskSize, "350"],
       !Equals [!Ref DiskSize, "400"],
-      !Equals [!Ref DiskSize, "450"],
+      !Equals [!Ref DiskSize, "450"]
     ]
   HasNotificationEmail: !Not [!Equals [!Ref NotificationEmail, ""]]
   HasSNSTopic: !Not [!Equals [!Ref AlarmSNSTopic, ""]]
@@ -660,10 +660,10 @@ Resources:
                           !If [
                             HasFreezerBucket,
                             !Ref FreezerBucket,
-                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                          ],
-                      },
-                    ],
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                          ]
+                      }
+                    ]
                 }
               - {
                   "Fn::Sub":
@@ -674,10 +674,10 @@ Resources:
                           !If [
                             HasFreezerBucket,
                             !Ref FreezerBucket,
-                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                          ],
-                      },
-                    ],
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                          ]
+                      }
+                    ]
                 }
             Effect: Allow
           - Action:
@@ -836,13 +836,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
                     EventsTopicFlag:
                       !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
@@ -1008,13 +1008,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
                     EventsTopicFlag:
                       !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
@@ -1067,13 +1067,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
                     EventsTopicFlag:
                       !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
@@ -1125,13 +1125,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
                     EventsTopicFlag:
                       !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
@@ -1183,13 +1183,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
                     EventsTopicFlag:
                       !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
@@ -1231,13 +1231,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
                     EventsTopicFlag:
                       !If [HasEventsTopic, !Sub "--kafka.event.topic ${EventsTopic}", ""]
@@ -1251,7 +1251,7 @@ Resources:
           !If [
             HasReplicaImageAMI,
             !Ref ReplicaImageAMI,
-            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
           ]
         InstanceType: m5.large
         TagSpecifications:
@@ -1310,12 +1310,12 @@ Resources:
                               !If [
                                 HasFreezerBucket,
                                 !Ref FreezerBucket,
-                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                              ],
-                          },
-                        ],
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                              ]
+                          }
+                        ]
                     },
-                    "",
+                    ""
                   ]
 
   MasterAutoScalingGroup:
@@ -1339,7 +1339,7 @@ Resources:
             !If [
               MasterSpotLowestPrice,
               !FindInMap [PoolSize, Size, !Ref MasterSize],
-              !Ref "AWS::NoValue",
+              !Ref "AWS::NoValue"
             ]
         LaunchTemplate:
           LaunchTemplateSpecification:
@@ -2203,10 +2203,10 @@ Resources:
                           !If [
                             HasFreezerBucket,
                             !Ref FreezerBucket,
-                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                          ],
-                      },
-                    ],
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                          ]
+                      }
+                    ]
                 }
               - {
                   "Fn::Sub":
@@ -2217,10 +2217,10 @@ Resources:
                           !If [
                             HasFreezerBucket,
                             !Ref FreezerBucket,
-                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                          ],
-                      },
-                    ],
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                          ]
+                      }
+                    ]
                 }
             Effect: Allow
           - Action:
@@ -2436,7 +2436,7 @@ Resources:
           !If [
             HasReplicaImageAMI,
             !Ref ReplicaImageAMI,
-            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
           ]
         InstanceType: m5ad.large
         TagSpecifications:
@@ -2475,12 +2475,12 @@ Resources:
               SmallReplica,
               {
                 DeviceName: "/dev/sdg",
-                Ebs: { VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125 },
+                Ebs: { VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125 }
               },
               {
                 DeviceName: "/dev/sdg",
-                Ebs: { VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125 },
-              },
+                Ebs: { VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125 }
+              }
             ]
         UserData:
           "Fn::Base64":
@@ -2515,12 +2515,12 @@ Resources:
                               !If [
                                 HasFreezerBucket,
                                 !Ref FreezerBucket,
-                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                              ],
-                          },
-                        ],
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                              ]
+                          }
+                        ]
                     },
-                    "",
+                    ""
                   ]
 
   ReplicaAutoScalingPolicy:
@@ -2556,7 +2556,7 @@ Resources:
             !If [
               ReplicaSpotLowestPrice,
               !FindInMap [PoolSize, Size, !Ref ReplicaSize],
-              !Ref "AWS::NoValue",
+              !Ref "AWS::NoValue"
             ]
         LaunchTemplate:
           LaunchTemplateSpecification:
@@ -2575,9 +2575,9 @@ Resources:
             !If [
               HasATG,
               !Ref AlternateTargetGroup,
-              { "Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList" },
-            ],
-          ],
+              { "Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList" }
+            ]
+          ]
         ]
       MetricsCollection:
         - Granularity: 1Minute
@@ -2673,13 +2673,13 @@ Resources:
                                     HasFreezerBucket,
                                     !Ref FreezerBucket,
                                     {
-                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket",
-                                    },
-                                  ],
-                              },
-                            ],
+                                      "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket"
+                                    }
+                                  ]
+                              }
+                            ]
                         },
-                        "",
+                        ""
                       ]
               mode: "000700"
               owner: root
@@ -2691,7 +2691,7 @@ Resources:
           !If [
             HasReplicaImageAMI,
             !Ref ReplicaImageAMI,
-            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
           ]
         InstanceType: m5a.large
         TagSpecifications:
@@ -2988,12 +2988,12 @@ Resources:
                               !If [
                                 HasFreezerBucket,
                                 !Ref FreezerBucket,
-                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                              ],
-                          },
-                        ],
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                              ]
+                          }
+                        ]
                     },
-                    "",
+                    ""
                   ]
   # PrunerLaunchTemplate:
   #   Type: AWS::EC2::LaunchTemplate
@@ -3258,7 +3258,7 @@ Resources:
           !If [
             HasReplicaImageAMI,
             !Ref ReplicaImageAMI,
-            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
           ]
         InstanceType: m5ad.large
         TagSpecifications:
@@ -3296,12 +3296,12 @@ Resources:
               SmallReplica,
               {
                 DeviceName: "/dev/sdg",
-                Ebs: { VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125 },
+                Ebs: { VolumeSize: 25, VolumeType: gp3, Iops: 3000, Throughput: 125 }
               },
               {
                 DeviceName: "/dev/sdg",
-                Ebs: { VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125 },
-              },
+                Ebs: { VolumeSize: 150, VolumeType: gp3, Iops: 3000, Throughput: 125 }
+              }
             ]
         UserData:
           "Fn::Base64":
@@ -3322,7 +3322,7 @@ Resources:
                     HasReplicaGraphQL,
                     "--graphql --graphql.addr 0.0.0.0 --graphql.port 8547 --graphql.vhosts
                     \\\\\\'*\\\\\\'",
-                    "",
+                    ""
                   ]
                 ReplicaWebsocketsFlag:
                   !If [HasReplicaWebsockets, "--ws --ws.addr 0.0.0.0 --ws.port 8546", ""]
@@ -3340,12 +3340,12 @@ Resources:
                               !If [
                                 HasFreezerBucket,
                                 !Ref FreezerBucket,
-                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                              ],
-                          },
-                        ],
+                                { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                              ]
+                          }
+                        ]
                     },
-                    "",
+                    ""
                   ]
 
   FallbackAutoScalingPolicy:
@@ -3381,7 +3381,7 @@ Resources:
             !If [
               ReplicaSpotLowestPrice,
               !FindInMap [PoolSize, Size, !Ref ReplicaSize],
-              !Ref "AWS::NoValue",
+              !Ref "AWS::NoValue"
             ]
         LaunchTemplate:
           LaunchTemplateSpecification:
@@ -3400,9 +3400,9 @@ Resources:
             !If [
               HasATG,
               !Ref AlternateTargetGroup,
-              { "Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList" },
-            ],
-          ],
+              { "Fn::ImportValue": !Sub "${InfrastructureStack}-ALBGroupList" }
+            ]
+          ]
         ]
       MetricsCollection:
         - Granularity: 1Minute
@@ -3479,10 +3479,10 @@ Resources:
                           !If [
                             HasFreezerBucket,
                             !Ref FreezerBucket,
-                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                          ],
-                      },
-                    ],
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                          ]
+                      }
+                    ]
                 }
               - {
                   "Fn::Sub":
@@ -3493,10 +3493,10 @@ Resources:
                           !If [
                             HasFreezerBucket,
                             !Ref FreezerBucket,
-                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" },
-                          ],
-                      },
-                    ],
+                            { "Fn::ImportValue": !Sub "${InfrastructureStack}-FreezerBucket" }
+                          ]
+                      }
+                    ]
                 }
             Effect: Allow
           - Action:

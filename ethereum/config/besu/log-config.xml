@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8"?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <Configuration status="INFO" monitorInterval="5">
 
   <Properties>
@@ -7,14 +7,24 @@
 
   <Appenders>
     <Console name="Console" target="SYSTEM_OUT">
-      <PatternLayout alwaysWriteExceptions="false" pattern='{"timestamp":"%d{ISO8601}","container":"${hostName}","level":"%level","thread":"%t","class":"%c{1}","message":"%msg","throwable":"%throwable{full}"}%n'/>
+      <PatternLayout
+        alwaysWriteExceptions="false"
+        pattern='{"timestamp":"%d{ISO8601}","container":"${hostName}","level":"%level","thread":"%t","class":"%c{1}","message":"%msg","throwable":"%throwable{full}"}%n'
+      />
     </Console>
-    <RollingFile name="RollingFile" fileName="/var/log/besu-${env:HOSTNAME}.log" filePattern="/var/log/besu-${env:HOSTNAME}-%d{yyyy-MM-dd}-%i.log" >
-      <PatternLayout alwaysWriteExceptions="false" pattern='{"timestamp":"%d{ISO8601}","container":"${hostName}","level":"%level","thread":"%t","class":"%c{1}","message":"%msg","throwable":"%enc{%throwable}{JSON}"}%n'/>
+    <RollingFile
+      name="RollingFile"
+      fileName="/var/log/besu-${env:HOSTNAME}.log"
+      filePattern="/var/log/besu-${env:HOSTNAME}-%d{yyyy-MM-dd}-%i.log"
+    >
+      <PatternLayout
+        alwaysWriteExceptions="false"
+        pattern='{"timestamp":"%d{ISO8601}","container":"${hostName}","level":"%level","thread":"%t","class":"%c{1}","message":"%msg","throwable":"%enc{%throwable}{JSON}"}%n'
+      />
       <Policies>
         <SizeBasedTriggeringPolicy size="1 MB" />
       </Policies>
-      <DefaultRolloverStrategy max="4"/>
+      <DefaultRolloverStrategy max="4" />
     </RollingFile>
   </Appenders>
 

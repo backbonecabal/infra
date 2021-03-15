@@ -342,7 +342,7 @@ Resources:
           !If [
             HasSnapshotImageAMI,
             !Ref SnapshotImageAMI,
-            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI],
+            !FindInMap [RegionMap, !Ref "AWS::Region", AL2AMI]
           ]
         InstanceType: !Ref NodeInstanceType
         TagSpecifications:
@@ -473,7 +473,7 @@ Resources:
                   !If [
                     HasFreezerBucket,
                     !Sub "--datadir.ancient=s3://${FreezerBucket}/${NetworkId}",
-                    "",
+                    ""
                   ]
 
   NodeInstance:

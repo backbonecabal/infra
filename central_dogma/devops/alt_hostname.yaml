@@ -1,6 +1,5 @@
 Description:
-  A middleware stack that adds a new hostname with its own target group to the Load
-  Balancer.
+  A middleware stack that adds a new hostname with its own target group to the Load Balancer.
 
 Parameters:
   InfrastructureStack:
